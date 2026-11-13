@@ -55,7 +55,6 @@
   .item .name b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .name small{color:var(--muted);font-size:11.5px}
   .item .rot{color:var(--accent);font-weight:600;margin-left:2px}
-  .item button.rl,.item button.rr{width:24px;font-size:14px}
   .item button{background:none;border:1px solid transparent;color:var(--muted);cursor:pointer;font:inherit;font-size:13px;width:28px;height:28px;border-radius:7px;flex:none}
   .item button:hover{color:var(--text);border-color:var(--line);background:rgba(255,255,255,.05)}
   .empty{padding:10px 8px 14px;color:var(--muted);font-size:12.5px}
@@ -98,7 +97,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>Earth on <span>Mars</span>, true size</h1>
-    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Click a country and drag its round ↻ handle to rotate it (or Shift-drag, or use ↺ ↻ in the list). Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. Zoom in on a landing site for HiRISE close-ups down to ~25 cm per pixel. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
+    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Click a country and drag its round ↻ handle to rotate it (double-click the handle to reset), or Shift-drag it. Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. Zoom in on a landing site for HiRISE close-ups down to ~25 cm per pixel. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -633,7 +632,16 @@ rotHandle.on('drag', () => {
   setGeom(selected); refresh(); renderRot(selected);
 });
 rotHandle.on('dragend', () => { rotDragging = false; placeHandle(); save(); });
+rotEl.title = 'Drag to rotate · double-click to reset';
+const onHandle = e => !!(e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.rothandle'));
+map.on('dblclick', e => {
+  if (!onHandle(e)) return;
+  e.preventDefault();                                   // no double-click zoom
+  if (!selected) return;
+  selected.rot = 0; setGeom(selected); refresh(); renderRot(selected); placeHandle(); save();
+});
 map.on('click', e => {
+  if (onHandle(e)) return;
   const hit = map.queryRenderedFeatures(e.point, { layers: ['c-fill'] })[0];
   if (!hit) { selected = null; placeHandle(); }
 });
@@ -654,11 +662,6 @@ function flyToCountry(it) {
 function bearingDeg(a, b) {                   // initial great-circle bearing from a to b, degrees
   const p1 = a[1] * D2R, p2 = b[1] * D2R, dl = (b[0] - a[0]) * D2R;
   return Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * R2D;
-}
-function rotateBy(it, deg) {
-  it.rot = ((((it.rot || 0) + deg) % 360) + 540) % 360 - 180;
-  setGeom(it); refresh(); renderRot(it); save();
-  selectCountry(it);
 }
 function renderRot(it) { const el = document.querySelector(`.item[data-id="${it.id}"] .rot`); if (el) el.textContent = Math.round(it.rot || 0) ? Math.round(it.rot) + '°' : ''; }
 function endDrag() {
@@ -683,11 +686,7 @@ function renderList() {
     const row = document.createElement('div'); row.className = 'item'; row.dataset.id = it.id;
     row.innerHTML = `<span class="chip" style="background:${it.color}"></span>
       <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars <span class="rot"></span></small></span>
-      <button class="rl" title="Rotate left 15° (or Shift-drag the country)">↺</button><button class="rr" title="Rotate right 15°">↻</button>
       <button class="rm" title="Remove">✕</button>`;
-    row.querySelector('.rl').onclick = () => rotateBy(it, -15);
-    row.querySelector('.rr').onclick = () => rotateBy(it, 15);
-    row.querySelector('.rl').ondblclick = row.querySelector('.rr').ondblclick = e => { e.preventDefault(); it.rot = 0; setGeom(it); refresh(); renderRot(it); save(); };
     row.querySelector('.name').onclick = () => { selectCountry(it); flyToCountry(it); };
     row.querySelector('.rm').onclick = () => removeCountry(it);
     listEl.appendChild(row); renderRot(it);
