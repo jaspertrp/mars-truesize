@@ -219,9 +219,8 @@ function showToast(t) {
 // ---------- elevation ----------
 // Esri's OnMars MDEM200M service: MOLA/HRSC blended DEM (200 m), LERC-compressed float tiles in a geographic grid.
 // The 'dem://' protocol samples them into Web Mercator terrarium-encoded tiles for MapLibre terrain + hillshade.
-// MapLibre stops drawing terrain when the ground under a close-up, tilted camera sits kilometres above or below
-// its "sea level". So heights are measured from a movable baseline: the floor of Hellas (≈ −8.2 km) when zoomed
-// out, and the local ground level at the centre of the view when zoomed in (see rebaseTerrain).
+// Heights are measured from the floor of Hellas (≈ −8.2 km below the Mars datum), so the terrain never dips
+// below MapLibre's "sea level".
 const DEM_OFFSET = 8300;
 const DEM_URL = (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/MDEM200M/ImageServer/tile/${z}/${r}/${c}`;
 let lercReady = null;
@@ -238,21 +237,8 @@ function getDem(z, r, c) {
   if (demCache.size > 200) demCache.delete(demCache.keys().next().value);
   return p;
 }
-function rawElevationAt(lng, lat) {          // metres relative to the Mars datum, from a level-6 tile
-  const zs = 6, span = 180 / 2 ** zs, cols = 2 ** (zs + 1);
-  const fy = (90 - lat) / span, fx = (wrapLon(lng) + 180) / span;
-  const r = Math.min(2 ** zs - 1, Math.max(0, Math.floor(fy))), c = Math.floor(fx) % cols;
-  return getDem(zs, r, c).then(t => {
-    if (!t) return null;
-    const vx = Math.min(t.w - 1, Math.max(0, Math.round((fx - Math.floor(fx)) * (t.w - 1))));
-    const vy = Math.min(t.h - 1, Math.max(0, Math.round((fy - r) * (t.h - 1))));
-    const h = t.px[vy * t.w + vx]; return h > -20000 && h < 30000 ? h : null;
-  });
-}
 maplibregl.addProtocol('dem', async params => {
-  const [path, query] = params.url.replace('dem://', '').split('?');
-  const [zz, xx, yy] = path.split('/').map(Number);
-  const base = query ? +new URLSearchParams(query).get('b') : -DEM_OFFSET;
+  const [zz, xx, yy] = params.url.replace('dem://', '').split('/').map(Number);
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
   const latN = tile2lat(yy, n), latS = tile2lat(yy + 1, n);
   const boost = Math.min(2, Math.max(0, Math.floor(Math.log2(1 / Math.cos(((latN + latS) / 2) * D2R)))));
@@ -282,7 +268,7 @@ maplibregl.addProtocol('dem', async params => {
         h = (a * (1 - ax) + b * ax) * (1 - ay) + (e * (1 - ax) + f * ax) * ay;
         if (!(h > -20000 && h < 30000)) h = 0;
       }
-      h -= base;
+      h += DEM_OFFSET;
       const v = h + 32768, k = (j * W + i) * 4;
       d[k] = v >> 8; d[k + 1] = Math.floor(v) & 255; d[k + 2] = Math.floor((v - Math.floor(v)) * 256); d[k + 3] = 255;
     }
@@ -693,23 +679,7 @@ function applyTerrain(animate) {
     if (animate) map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
   }
 }
-let demBase = -DEM_OFFSET;
-async function rebaseTerrain() {
-  if (!terrainOn) return;
-  let b = -DEM_OFFSET;
-  if (map.getZoom() >= 8.5) {
-    const c = map.getCenter(), raw = await rawElevationAt(c.lng, c.lat);
-    if (raw == null) return;
-    b = Math.round(raw / 250) * 250;
-    if (demBase !== -DEM_OFFSET && Math.abs(b - demBase) < 1200) return;   // still close enough: keep tiles
-  }
-  if (b === demBase) return;
-  demBase = b;
-  for (const id of ['dem', 'demHs']) { map.getSource(id).setTiles([`dem://{z}/{x}/{y}?b=${b}`]); if (map.refreshTiles) map.refreshTiles(id); }
-  map.triggerRepaint();
-}
-map.on('moveend', rebaseTerrain);
-tTerrain.onchange = () => { terrainOn = tTerrain.checked; applyTerrain(true); rebaseTerrain(); save(); };
+tTerrain.onchange = () => { terrainOn = tTerrain.checked; applyTerrain(true); save(); };
 exagEl.oninput = () => { exag = +exagEl.value; applyTerrain(false); };
 exagEl.onchange = () => save();
 
@@ -865,7 +835,7 @@ map.on('load', () => {
     terrainOn = !!saved.terrain; exag = saved.exag || 3; tTerrain.checked = terrainOn; exagEl.value = exag;
     (saved.objects || []).forEach(o => addObject(o.k, o.lng, o.lat, false));
   }
-  applyTerrain(false); rebaseTerrain();
+  applyTerrain(false);
   if (saved && Array.isArray(saved.items)) {
     saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c)); colorIdx = saved.items.length;
   } else {
