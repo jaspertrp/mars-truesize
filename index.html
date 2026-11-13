@@ -32,6 +32,7 @@
   .search{position:relative;padding:0 16px 12px}
   .basesel{display:flex;align-items:center;gap:10px;padding:0 16px 10px;font-size:12.5px;color:var(--muted)}
   .terr{display:flex;align-items:center;gap:10px;padding:0 16px 10px;font-size:12.5px;color:var(--muted)}
+  .terr.hir select{flex:1;min-width:0;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:12.5px}
   .terr .tog{display:flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;white-space:nowrap}
   .terr input[type=checkbox]{accent-color:var(--accent);margin:0}
   .terr .exag{flex:1;display:flex;align-items:center;gap:6px;opacity:.45;pointer-events:none}
@@ -70,6 +71,8 @@
   .feat{display:block;color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;text-shadow:0 0 3px #000,0 0 6px #000,0 0 10px rgba(0,0,0,.8);pointer-events:none}
   .site{position:relative;display:block;font-size:10px;font-weight:500;color:#ffe0c9;white-space:nowrap;padding-left:10px;text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none}
   .site::before{content:'';position:absolute;left:0;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#ffd27a;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
+  .rothandle{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#1a0f0b;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:700 15px/1 system-ui,sans-serif;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.55)}
+  .rothandle:active{cursor:grabbing}
   .cname{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 7px #000}
   .maplibregl-popup.tt .maplibregl-popup-content{background:#1d1411;color:var(--text);border:1px solid var(--line);font-family:inherit;font-size:12px;padding:6px 9px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
   .maplibregl-popup.tt .maplibregl-popup-tip{display:none}
@@ -95,10 +98,14 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>Earth on <span>Mars</span>, true size</h1>
-    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles, and Shift-drag (or use ↺ ↻) to rotate them. Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
+    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Click a country and drag its round ↻ handle to rotate it (or Shift-drag, or use ↺ ↻ in the list). Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. Zoom in on a landing site for HiRISE close-ups down to ~25 cm per pixel. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
+  <div class="terr hir">
+    <label class="tog"><input type="checkbox" id="tHirise" checked> HiRISE detail</label>
+    <select id="site"><option value="">Fly to a landing site…</option></select>
+  </div>
   <div class="terr">
     <label class="tog"><input type="checkbox" id="tTerrain"> 3D terrain</label>
     <label class="exag" id="exagWrap" title="Vertical exaggeration. 1× = true proportions">Height <input type="range" id="exag" min="1" max="10" step="0.5" value="3"><span id="exagVal">3×</span></label>
@@ -160,12 +167,20 @@ const BASEMAPS = {
   classic: { label: 'Classic (8k texture)', local: true,
     credit: 'Solar System Scope 8k texture (CC BY 4.0), based on NASA data' }
 };
+// HiRISE: every published HiRISE image (~25 cm/px) in one uncontrolled mosaic, served by Esri.
+// Covers only a few percent of Mars, so it's an overlay that fades in when zoomed in; gaps stay transparent.
+const OVERLAYS = {
+  hirise: { ts: 512, max: 17, out: 'image/webp',
+    url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/HiRISE/MapServer/tile/${z}/${r}/${c}`,
+    credit: 'HiRISE: NASA/JPL/University of Arizona/USGS/Esri' }
+};
+const LAYERDEF = k => BASEMAPS[k] || OVERLAYS[k];
 const srcCache = new Map();               // key -> Promise<ImageBitmap|null>
 function getSrc(bm, z, r, c) {
   const key = bm + '/' + z + '/' + r + '/' + c;
   let p = srcCache.get(key);
   if (p) { srcCache.delete(key); srcCache.set(key, p); return p; }
-  p = fetch(BASEMAPS[bm].url(z, r, c), { mode: 'cors' })
+  p = fetch(LAYERDEF(bm).url(z, r, c), { mode: 'cors' })
     .then(res => res.ok ? res.blob() : null)
     .then(b => b ? createImageBitmap(b) : null)
     .catch(() => null);
@@ -177,7 +192,7 @@ const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D
 const failures = {};
 maplibregl.addProtocol('eq', async params => {
   const [bm, zs_, xs, ys] = params.url.replace('eq://', '').split('/');
-  const B = BASEMAPS[bm], z = +zs_, x = +xs, y = +ys, n = 2 ** z;
+  const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys, n = 2 ** z;
   const lon0 = x / n * 360 - 180, lonSpan = 360 / n;
   const latN = tile2lat(y, n), latS = tile2lat(y + 1, n);
   // pick the source level whose pixel size matches; boost a little towards the poles (Mercator stretch)
@@ -219,7 +234,7 @@ function showToast(t) {
 }
 // ---------- elevation ----------
 // Esri's OnMars MDEM200M service: MOLA/HRSC blended DEM (200 m), LERC-compressed float tiles in a geographic grid.
-// The 'dem://' protocol samples them into Web Mercator terrarium-encoded tiles for MapLibre terrain + hillshade.
+// The 'dem://' protocol samples them into Web Mercator terrarium-encoded tiles for MapLibre terrain.
 // Heights are measured from the floor of Hellas (≈ −8.2 km below the Mars datum), so the terrain never dips
 // below MapLibre's "sea level".
 const DEM_OFFSET = 8300;
@@ -278,7 +293,9 @@ maplibregl.addProtocol('dem', async params => {
   return { data: await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer() };
 });
 
-const baseSources = {}, baseLayers = [];
+const baseSources = {
+  'ov-hirise': { type: 'raster', tiles: ['eq://hirise/{z}/{x}/{y}'], tileSize: 512, minzoom: 11, maxzoom: 18 }
+}, baseLayers = [];
 for (const [k, B] of Object.entries(BASEMAPS)) {
   baseSources['base-' + k] = B.local
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
@@ -292,7 +309,7 @@ const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
   center: [-62, 0], zoom: startProj === 'globe' ? 1.6 : 2,
-  minZoom: 0.5, maxZoom: 15, renderWorldCopies: true, maxPitch: 80,
+  minZoom: 0.5, maxZoom: 18, renderWorldCopies: true, maxPitch: 80,
   style: {
     version: 8,
     projection: { type: startProj },
@@ -302,21 +319,20 @@ const map = new maplibregl.Map({
       countries: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       outlines: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       grid: { type: 'geojson', data: makeGrid() },
-      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 },
-      demHs: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 }
+      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 }
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#e9e2dc' } },
       ...baseLayers,
-      { id: 'hillshade', type: 'hillshade', source: 'demHs', layout: { visibility: 'none' },
-        paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#2a1208', 'hillshade-highlight-color': '#fff1e4', 'hillshade-accent-color': '#3a1a0c' } },
+      { id: 'ov-hirise', type: 'raster', source: 'ov-hirise', minzoom: 11,
+        paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 1], 'raster-fade-duration': 200 } },
       { id: 'grid', type: 'line', source: 'grid', layout: { visibility: 'none' }, paint: { 'line-color': '#fff', 'line-opacity': 0.25, 'line-width': 0.7 } },
       { id: 'c-fill', type: 'fill', source: 'countries', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.55, 'fill-antialias': false } },
       { id: 'c-line', type: 'line', source: 'outlines', paint: { 'line-color': '#fff', 'line-width': 1.4 } }
     ]
   }
 });
-map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.boxZoom.disable();   // Shift-drag is used to rotate countries
 class ViewControl {
   onAdd(m) {
@@ -328,6 +344,7 @@ class ViewControl {
     btn('&#9660;', 'Tilt less', () => m.easeTo({ pitch: Math.max(0, m.getPitch() - 15), duration: 300 }));
     btn('&#8634;', 'Rotate left', () => m.easeTo({ bearing: m.getBearing() - 30, duration: 300 }));
     btn('&#8635;', 'Rotate right', () => m.easeTo({ bearing: m.getBearing() + 30, duration: 300 }));
+    btn('N', 'Reset view: north up, no tilt', () => m.easeTo({ bearing: 0, pitch: 0, duration: 600 }));
     const sync = () => this.tilt3d.classList.toggle('on', m.getPitch() > 10);
     m.on('pitchend', sync); m.on('load', sync);
     return el;
@@ -371,10 +388,10 @@ const FEATURES = [
   ['Planum Boreum', 84, 0], ['Planum Australe', -84, 160], ['Vastitas Borealis', 67, -150]
 ];
 const SITES = [
-  ['Viking 1', 22.27, -47.95], ['Viking 2', 47.64, 134.29], ['Pathfinder', 19.13, -33.22],
-  ['Spirit', -14.57, 175.47], ['Opportunity', -1.95, -5.53], ['Phoenix', 68.22, -125.7],
-  ['Curiosity · Gale', -4.59, 137.44], ['InSight', 4.5, 135.62], ['Perseverance · Jezero', 18.44, 77.45],
-  ['Zhurong', 25.07, 109.93]
+  ['Viking 1', 22.697, -48.222], ['Viking 2', 48.269, 134.010], ['Pathfinder', 19.130, -33.220],
+  ['Spirit', -14.568, 175.473], ['Opportunity', -1.946, -5.527], ['Phoenix', 68.219, -125.749],
+  ['Curiosity · Gale', -4.589, 137.442], ['InSight', 4.502, 135.623], ['Perseverance · Jezero', 18.445, 77.451],
+  ['Zhurong', 25.066, 109.925]
 ];
 function labelMarker(html, cls, lat, lon, anchor) {
   const el = document.createElement('div'), inner = document.createElement('span');
@@ -516,6 +533,7 @@ function addCountry(name, lat, lon, color, rot) {
   return item;
 }
 function removeCountry(item) {
+  if (typeof selected !== 'undefined' && selected === item) { selected = null; rotHandle.remove(); }
   item.label.remove();
   placed.splice(placed.indexOf(item), 1);
   refresh(); renderList(); save();
@@ -530,6 +548,8 @@ function refresh() {
   }
   src.setData({ type: 'FeatureCollection', features: fills });
   map.getSource('outlines').setData({ type: 'FeatureCollection', features: lines });
+  if (typeof cullLabels === 'function' && map.loaded()) cullLabels();
+  if (typeof selected !== 'undefined' && selected && !rotDragging) placeHandle();
 }
 
 // ---------- hover + drag ----------
@@ -551,6 +571,7 @@ function startDrag(e) {
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
   const it = findItem(e); if (!it) return;
   e.preventDefault();
+  selectCountry(it);
   const rotating = !oe.touches && (oe.shiftKey || oe.altKey);
   drag = { it, lastLng: e.lngLat.lng, lastLat: e.lngLat.lat, rotating,
     startRot: it.rot || 0, startBearing: rotating ? bearingDeg([it.lon, it.lat], [e.lngLat.lng, e.lngLat.lat]) : 0 };
@@ -581,6 +602,55 @@ function moveDrag(e) {
     refresh();
   });
 }
+// ----- rotation handle: click a country, then drag the round handle around it -----
+var selected = null, rotDragging = false;
+const rotEl = document.createElement('div'); rotEl.className = 'rothandle'; rotEl.title = 'Drag to rotate'; rotEl.textContent = '↻';
+const rotHandle = new maplibregl.Marker({ element: rotEl, draggable: true, opacityWhenCovered: '0' });
+function handleRadius(it) {                  // a bit inside the outer edge of the country, in radians on Mars
+  if (it._hr) return it._hr;
+  let mx = 0; for (const poly of it.polar) { const r = poly[0]; for (let i = 0; i < r.length; i += 2) if (r[i] > mx) mx = r[i]; }
+  // ignore far-flung islands: use the largest polygon only
+  let best = null, bestN = 0; for (const poly of it.polar) if (poly[0].length > bestN) { bestN = poly[0].length; best = poly[0]; }
+  let m2 = 0; if (best) for (let i = 0; i < best.length; i += 2) if (best[i] > m2) m2 = best[i];
+  return (it._hr = Math.min(mx, m2 || mx) * 0.8);
+}
+function placeHandle() {
+  if (!selected || !placed.includes(selected)) { rotHandle.remove(); selected = null; return; }
+  const [lo, la] = destPoint(selected.lon, selected.lat, (selected.rot || 0) * D2R, handleRadius(selected));
+  rotHandle.setLngLat([lo, la]).addTo(map);
+}
+function selectCountry(it) { selected = it; placeHandle(); }
+function destPoint(lon, lat, b, d) {
+  const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1), sd = Math.sin(d), cd = Math.cos(d);
+  const sp2 = sp1 * cd + cp1 * sd * Math.cos(b), p2 = Math.asin(Math.max(-1, Math.min(1, sp2)));
+  return [lon + Math.atan2(Math.sin(b) * sd * cp1, cd - sp1 * sp2) * R2D, p2 * R2D];
+}
+rotHandle.on('dragstart', () => { rotDragging = true; });
+rotHandle.on('drag', () => {
+  if (!selected) return;
+  const h = rotHandle.getLngLat();
+  selected.rot = ((bearingDeg([selected.lon, selected.lat], [h.lng, h.lat]) % 360) + 540) % 360 - 180;
+  setGeom(selected); refresh(); renderRot(selected);
+});
+rotHandle.on('dragend', () => { rotDragging = false; placeHandle(); save(); });
+map.on('click', e => {
+  const hit = map.queryRenderedFeatures(e.point, { layers: ['c-fill'] })[0];
+  if (!hit) { selected = null; placeHandle(); }
+});
+function flyToCountry(it) {
+  // frame the largest landmass (overseas islands can land thousands of km away on Mars), centred on the country
+  let zoom = 2;
+  if (!it.fill.cap) {
+    let big = null, bigA = -1;
+    for (const poly of it.geom) { const a = Math.abs(d3.geoArea({ type: 'Polygon', coordinates: [poly[0]] })); if (a < 2 * Math.PI && a > bigA) { bigA = a; big = poly[0]; } }
+    if (big) {
+      const b = new maplibregl.LngLatBounds(); big.forEach(p => b.extend([p[0] - it.lon + 0, p[1]]));   // relative to the centre: no wrap issues
+      const cam = map.cameraForBounds(new maplibregl.LngLatBounds([b.getWest() + it.lon, b.getSouth()], [b.getEast() + it.lon, b.getNorth()]), { padding: 90 });
+      if (cam && isFinite(cam.zoom)) zoom = Math.min(7, Math.max(1, cam.zoom));
+    }
+  }
+  map.flyTo({ center: [it.lon, it.lat], zoom, duration: 1200 });
+}
 function bearingDeg(a, b) {                   // initial great-circle bearing from a to b, degrees
   const p1 = a[1] * D2R, p2 = b[1] * D2R, dl = (b[0] - a[0]) * D2R;
   return Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * R2D;
@@ -588,6 +658,7 @@ function bearingDeg(a, b) {                   // initial great-circle bearing fr
 function rotateBy(it, deg) {
   it.rot = ((((it.rot || 0) + deg) % 360) + 540) % 360 - 180;
   setGeom(it); refresh(); renderRot(it); save();
+  selectCountry(it);
 }
 function renderRot(it) { const el = document.querySelector(`.item[data-id="${it.id}"] .rot`); if (el) el.textContent = Math.round(it.rot || 0) ? Math.round(it.rot) + '°' : ''; }
 function endDrag() {
@@ -617,12 +688,7 @@ function renderList() {
     row.querySelector('.rl').onclick = () => rotateBy(it, -15);
     row.querySelector('.rr').onclick = () => rotateBy(it, 15);
     row.querySelector('.rl').ondblclick = row.querySelector('.rr').ondblclick = e => { e.preventDefault(); it.rot = 0; setGeom(it); refresh(); renderRot(it); save(); };
-    row.querySelector('.name').onclick = () => {
-      if (it.fill.cap) { map.flyTo({ center: [it.lon, it.lat], zoom: Math.min(map.getZoom(), 2), duration: 900 }); return; }
-      const b = new maplibregl.LngLatBounds();
-      it.geom.forEach(poly => poly[0].forEach(p => b.extend(p)));
-      map.fitBounds(b, { padding: 80, maxZoom: 5, duration: 900 });
-    };
+    row.querySelector('.name').onclick = () => { selectCountry(it); flyToCountry(it); };
     row.querySelector('.rm').onclick = () => removeCountry(it);
     listEl.appendChild(row); renderRot(it);
   }
@@ -692,10 +758,42 @@ function setBase(k, auto) {
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
   for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k ? 'visible' : 'none');
-  document.getElementById('baseCredit').textContent = BASEMAPS[k].credit;
+  updateCredit();
   save();
 }
 baseSel.onchange = () => setBase(baseSel.value);
+
+// ---------- hide labels that are over the horizon or far outside the view ----------
+// (on the globe MapLibre can otherwise draw far-side markers in odd places when zoomed in)
+function cullLabels() {
+  const c = map.getCenter(), lim = Math.min(88, (360 / 2 ** map.getZoom()) * 6) * D2R;
+  const cc = [c.lng, c.lat];
+  const set = (m, hideForToggle) => {
+    const ll = m.getLngLat(), far = d3.geoDistance(cc, [ll.lng, ll.lat]) > lim;
+    m.getElement().style.visibility = far ? 'hidden' : '';
+  };
+  featMarkers.forEach(m => set(m)); siteMarkers.forEach(m => set(m));
+  placed.forEach(p => set(p.label));
+}
+map.on('move', cullLabels); map.on('load', cullLabels);
+
+// ---------- HiRISE overlay + landing sites ----------
+let showHirise = !(saved && saved.hirise === false);
+const tHirise = document.getElementById('tHirise'); tHirise.checked = showHirise;
+function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
+tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
+function updateCredit() {
+  const extra = showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
+  document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + extra;
+}
+map.on('zoomend', updateCredit);
+const siteSel = document.getElementById('site');
+SITES.forEach(([n], i) => siteSel.add(new Option(n, i)));
+siteSel.onchange = () => {
+  const s = SITES[+siteSel.value]; siteSel.value = ''; if (!s) return;
+  if (!showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
+  map.flyTo({ center: [s[2], s[1]], zoom: 15.5, pitch: 0, bearing: 0, duration: 3000 });
+};
 
 // ---------- 3D terrain ----------
 // MapLibre draws an Earth-sized planet; our Mars imagery is stretched onto it, so 1 Mars metre = MARS_SCALE map metres.
@@ -708,11 +806,9 @@ function applyTerrain(animate) {
   if (!map.isStyleLoaded()) return;
   if (terrainOn) {
     map.setTerrain({ source: 'dem', exaggeration: MARS_SCALE * exag });
-    map.setLayoutProperty('hillshade', 'visibility', 'visible');
     if (animate && map.getPitch() < 20) map.easeTo({ pitch: 55, duration: 1000 });
   } else {
     map.setTerrain(null);
-    map.setLayoutProperty('hillshade', 'visibility', 'none');
     if (animate) map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
   }
 }
@@ -724,6 +820,7 @@ exagEl.onchange = () => save();
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? 'viking' : wantedBase, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
+    hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 3 : exag })); } catch (e) {}
 }
 
@@ -737,7 +834,7 @@ map.on('load', () => {
   if (saved) {
     terrainOn = !!saved.terrain; exag = saved.exag || 3; tTerrain.checked = terrainOn; exagEl.value = exag;
   }
-  applyTerrain(false);
+  applyTerrain(false); applyHirise();
   if (saved && Array.isArray(saved.items)) {
     saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c, p.r)); colorIdx = saved.items.length;
   } else {
