@@ -547,6 +547,7 @@ function refresh() {
   }
   src.setData({ type: 'FeatureCollection', features: fills });
   map.getSource('outlines').setData({ type: 'FeatureCollection', features: lines });
+  if (typeof cullLabels === 'function' && map.loaded()) cullLabels();
 }
 
 // ---------- hover + drag ----------
@@ -713,6 +714,20 @@ function setBase(k, auto) {
   save();
 }
 baseSel.onchange = () => setBase(baseSel.value);
+
+// ---------- hide labels that are over the horizon or far outside the view ----------
+// (on the globe MapLibre can otherwise draw far-side markers in odd places when zoomed in)
+function cullLabels() {
+  const c = map.getCenter(), lim = Math.min(88, (360 / 2 ** map.getZoom()) * 6) * D2R;
+  const cc = [c.lng, c.lat];
+  const set = (m, hideForToggle) => {
+    const ll = m.getLngLat(), far = d3.geoDistance(cc, [ll.lng, ll.lat]) > lim;
+    m.getElement().style.visibility = far ? 'hidden' : '';
+  };
+  featMarkers.forEach(m => set(m)); siteMarkers.forEach(m => set(m));
+  placed.forEach(p => set(p.label));
+}
+map.on('move', cullLabels); map.on('load', cullLabels);
 
 // ---------- HiRISE overlay + landing sites ----------
 let showHirise = !(saved && saved.hirise === false);
