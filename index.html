@@ -74,6 +74,9 @@
   .maplibregl-ctrl-group{background:#1d1411}
   .maplibregl-ctrl-group button+button{border-top-color:#3a2a24}
   .maplibregl-ctrl button .maplibregl-ctrl-icon{filter:invert(1)}
+  .viewctrl button{color:#f6e9e1;font:600 13px/1 'Space Grotesk',system-ui,sans-serif}
+  .viewctrl button:hover{background:#2a1d18}
+  .viewctrl button.on{background:var(--accent);color:#1a0f0b}
   @media (max-width:640px){
     .panel{width:auto;right:10px;left:10px;top:10px;max-height:46%}
     .sub{display:none}
@@ -90,7 +93,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>Earth on <span>Mars</span>, true size</h1>
-    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Turn on 3D terrain and right-drag or Ctrl-drag to tilt. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
+    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -311,6 +314,23 @@ const map = new maplibregl.Map({
   }
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
+class ViewControl {
+  onAdd(m) {
+    const el = document.createElement('div');
+    el.className = 'maplibregl-ctrl maplibregl-ctrl-group viewctrl';
+    const btn = (label, title, fn) => { const b = document.createElement('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title); b.innerHTML = label; b.onclick = fn; el.appendChild(b); return b; };
+    this.tilt3d = btn('3D', 'Tilt the view (toggle)', () => m.easeTo({ pitch: m.getPitch() > 10 ? 0 : 60, duration: 700 }));
+    btn('&#9650;', 'Tilt more', () => m.easeTo({ pitch: Math.min(m.getMaxPitch(), m.getPitch() + 15), duration: 300 }));
+    btn('&#9660;', 'Tilt less', () => m.easeTo({ pitch: Math.max(0, m.getPitch() - 15), duration: 300 }));
+    btn('&#8634;', 'Rotate left', () => m.easeTo({ bearing: m.getBearing() - 30, duration: 300 }));
+    btn('&#8635;', 'Rotate right', () => m.easeTo({ bearing: m.getBearing() + 30, duration: 300 }));
+    const sync = () => this.tilt3d.classList.toggle('on', m.getPitch() > 10);
+    m.on('pitchend', sync); m.on('load', sync);
+    return el;
+  }
+  onRemove() {}
+}
+map.addControl(new ViewControl(), 'top-right');
 
 function makeGrid() {
   const f = [];
@@ -522,9 +542,11 @@ map.on('mousemove', 'c-fill', e => {
 map.on('mouseleave', 'c-fill', () => { if (!drag) { map.getCanvas().style.cursor = ''; popup.remove(); } });
 
 function startDrag(e) {
+  const oe = e.originalEvent;
+  // leave right-drag, Ctrl/⌘-drag and multi-finger gestures to the map (tilt / rotate)
+  if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
   const it = findItem(e); if (!it) return;
   e.preventDefault();
-  if (e.originalEvent.touches && e.originalEvent.touches.length > 1) return;
   drag = { it, lastLng: e.lngLat.lng, lastLat: e.lngLat.lat };
   map.dragPan.disable();
   map.getCanvas().style.cursor = 'grabbing';
