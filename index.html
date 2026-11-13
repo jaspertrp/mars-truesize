@@ -70,8 +70,6 @@
   .feat{display:block;color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;text-shadow:0 0 3px #000,0 0 6px #000,0 0 10px rgba(0,0,0,.8);pointer-events:none}
   .site{position:relative;display:block;font-size:10px;font-weight:500;color:#ffe0c9;white-space:nowrap;padding-left:10px;text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none}
   .site::before{content:'';position:absolute;left:0;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#ffd27a;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
-  .rothandle{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#1a0f0b;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font:700 15px/1 system-ui,sans-serif;cursor:grab;box-shadow:0 2px 8px rgba(0,0,0,.55)}
-  .rothandle:active{cursor:grabbing}
   .cname{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 7px #000}
   .maplibregl-popup.tt .maplibregl-popup-content{background:#1d1411;color:var(--text);border:1px solid var(--line);font-family:inherit;font-size:12px;padding:6px 9px;border-radius:7px;box-shadow:0 4px 14px rgba(0,0,0,.5)}
   .maplibregl-popup.tt .maplibregl-popup-tip{display:none}
@@ -219,7 +217,10 @@ maplibregl.addProtocol('eq', async params => {
   const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
   return { data: await blob.arrayBuffer() };
 });
-let baseKey = 'viking', fellBack = false, wantedBase = 'viking';
+const DEFAULT_BASE = 'relief';
+// the visitor's chosen basemap, read up front so an early fallback can never overwrite it
+let wantedBase = (saved && saved.v >= 3 && BASEMAPS[saved.base] && saved.base) || DEFAULT_BASE;
+let baseKey = wantedBase, fellBack = false;
 function maybeFallback(bm) {
   if (bm !== baseKey || bm === 'classic' || fellBack) return;
   fellBack = true;
@@ -299,7 +300,7 @@ for (const [k, B] of Object.entries(BASEMAPS)) {
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
     : { type: 'raster', tiles: [`eq://${k}/{z}/{x}/{y}`], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
   baseLayers.push({ id: 'base-' + k, type: 'raster', source: 'base-' + k,
-    layout: { visibility: k === 'viking' ? 'visible' : 'none' },
+    layout: { visibility: k === wantedBase ? 'visible' : 'none' },
     paint: { 'raster-fade-duration': 200, 'raster-resampling': 'linear' } });
 }
 
@@ -531,7 +532,6 @@ function addCountry(name, lat, lon, color, rot) {
   return item;
 }
 function removeCountry(item) {
-  if (typeof selected !== 'undefined' && selected === item) { selected = null; rotHandle.remove(); }
   item.label.remove();
   placed.splice(placed.indexOf(item), 1);
   refresh(); renderList(); save();
@@ -547,7 +547,6 @@ function refresh() {
   src.setData({ type: 'FeatureCollection', features: fills });
   map.getSource('outlines').setData({ type: 'FeatureCollection', features: lines });
   if (typeof cullLabels === 'function' && map.loaded()) cullLabels();
-  if (typeof selected !== 'undefined' && selected && !rotDragging) placeHandle();
 }
 
 // ---------- hover + drag ----------
@@ -569,7 +568,6 @@ function startDrag(e) {
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
   const it = findItem(e); if (!it) return;
   e.preventDefault();
-  selectCountry(it);
   const rotating = !oe.touches && (oe.shiftKey || oe.altKey);
   drag = { it, lastLng: e.lngLat.lng, lastLat: e.lngLat.lat, rotating,
     startRot: it.rot || 0, startBearing: rotating ? bearingDeg([it.lon, it.lat], [e.lngLat.lng, e.lngLat.lat]) : 0 };
@@ -600,50 +598,6 @@ function moveDrag(e) {
     refresh();
   });
 }
-// ----- rotation handle: click a country, then drag the round handle around it -----
-var selected = null, rotDragging = false;
-const rotEl = document.createElement('div'); rotEl.className = 'rothandle'; rotEl.title = 'Drag to rotate'; rotEl.textContent = '↻';
-const rotHandle = new maplibregl.Marker({ element: rotEl, draggable: true, opacityWhenCovered: '0' });
-function handleRadius(it) {                  // a bit inside the outer edge of the country, in radians on Mars
-  if (it._hr) return it._hr;
-  let mx = 0; for (const poly of it.polar) { const r = poly[0]; for (let i = 0; i < r.length; i += 2) if (r[i] > mx) mx = r[i]; }
-  // ignore far-flung islands: use the largest polygon only
-  let best = null, bestN = 0; for (const poly of it.polar) if (poly[0].length > bestN) { bestN = poly[0].length; best = poly[0]; }
-  let m2 = 0; if (best) for (let i = 0; i < best.length; i += 2) if (best[i] > m2) m2 = best[i];
-  return (it._hr = Math.min(mx, m2 || mx) * 0.8);
-}
-function placeHandle() {
-  if (!selected || !placed.includes(selected)) { rotHandle.remove(); selected = null; return; }
-  const [lo, la] = destPoint(selected.lon, selected.lat, (selected.rot || 0) * D2R, handleRadius(selected));
-  rotHandle.setLngLat([lo, la]).addTo(map);
-}
-function selectCountry(it) { selected = it; placeHandle(); }
-function destPoint(lon, lat, b, d) {
-  const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1), sd = Math.sin(d), cd = Math.cos(d);
-  const sp2 = sp1 * cd + cp1 * sd * Math.cos(b), p2 = Math.asin(Math.max(-1, Math.min(1, sp2)));
-  return [lon + Math.atan2(Math.sin(b) * sd * cp1, cd - sp1 * sp2) * R2D, p2 * R2D];
-}
-rotHandle.on('dragstart', () => { rotDragging = true; });
-rotHandle.on('drag', () => {
-  if (!selected) return;
-  const h = rotHandle.getLngLat();
-  selected.rot = ((bearingDeg([selected.lon, selected.lat], [h.lng, h.lat]) % 360) + 540) % 360 - 180;
-  setGeom(selected); refresh(); renderRot(selected);
-});
-rotHandle.on('dragend', () => { rotDragging = false; placeHandle(); save(); });
-rotEl.title = 'Drag to rotate · double-click to reset';
-const onHandle = e => !!(e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.rothandle'));
-map.on('dblclick', e => {
-  if (!onHandle(e)) return;
-  e.preventDefault();                                   // no double-click zoom
-  if (!selected) return;
-  selected.rot = 0; setGeom(selected); refresh(); renderRot(selected); placeHandle(); save();
-});
-map.on('click', e => {
-  if (onHandle(e)) return;
-  const hit = map.queryRenderedFeatures(e.point, { layers: ['c-fill'] })[0];
-  if (!hit) { selected = null; placeHandle(); }
-});
 function flyToCountry(it) {
   // frame the largest landmass (overseas islands can land thousands of km away on Mars), centred on the country
   let zoom = 2;
@@ -686,7 +640,7 @@ function renderList() {
     row.innerHTML = `<span class="chip" style="background:${it.color}"></span>
       <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars <span class="rot"></span></small></span>
       <button class="rm" title="Remove">✕</button>`;
-    row.querySelector('.name').onclick = () => { selectCountry(it); flyToCountry(it); };
+    row.querySelector('.name').onclick = () => flyToCountry(it);
     row.querySelector('.rm').onclick = () => removeCountry(it);
     listEl.appendChild(row); renderRot(it);
   }
@@ -736,7 +690,7 @@ segBtns.forEach(b => b.classList.toggle('on', b.dataset.p === proj));
 const showMarkers = (arr, on) => arr.forEach(m => on ? m.addTo(map) : m.remove());
 document.getElementById('tFeat').onchange = e => showMarkers(featMarkers, e.target.checked);
 document.getElementById('tSites').onchange = e => showMarkers(siteMarkers, e.target.checked);
-let showNames = !(saved && saved.names === false);
+let showNames = !!(saved && saved.v >= 3 && saved.names === true);   // names off by default
 const tNames = document.getElementById('tNames'); tNames.checked = showNames;
 tNames.onchange = () => { showNames = tNames.checked; for (const p of placed) p.label.getElement().style.display = showNames ? '' : 'none'; save(); };
 document.getElementById('tGrid').onchange = e => map.setLayoutProperty('grid', 'visibility', e.target.checked ? 'visible' : 'none');
@@ -752,7 +706,7 @@ map.on('mousemove', e => {
 const baseSel = document.getElementById('base');
 for (const [k, B] of Object.entries(BASEMAPS)) baseSel.add(new Option(B.label, k));
 function setBase(k, auto) {
-  if (!BASEMAPS[k]) k = 'viking';
+  if (!BASEMAPS[k]) k = DEFAULT_BASE;
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
   for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k ? 'visible' : 'none');
@@ -796,9 +750,10 @@ siteSel.onchange = () => {
 // ---------- 3D terrain ----------
 // MapLibre draws an Earth-sized planet; our Mars imagery is stretched onto it, so 1 Mars metre = MARS_SCALE map metres.
 const MARS_SCALE = 6378137 / (R_MARS * 1000);
-let terrainOn = false, exag = 3;
+let terrainOn = true, exag = 3;   // 3D terrain on by default
 const exagEl = document.getElementById('exag'), exagWrap = document.getElementById('exagWrap'), tTerrain = document.getElementById('tTerrain');
 function applyTerrain(animate) {
+  tTerrain.checked = terrainOn;
   exagWrap.classList.toggle('on', terrainOn);
   document.getElementById('exagVal').textContent = exag + '×';
   if (!map.isStyleLoaded()) return;
@@ -816,21 +771,21 @@ exagEl.onchange = () => save();
 
 // ---------- persistence (this browser only) ----------
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? 'viking' : wantedBase, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
+  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 3, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
     hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 3 : exag })); } catch (e) {}
 }
 
 map.on('load', () => {
-  if (!fellBack) setBase((saved && saved.base) || 'viking');
+  if (!fellBack) setBase(wantedBase);
   if (innerWidth < 640) {
     map.setPadding({ top: document.getElementById('panel').offsetHeight + 10, bottom: 30, left: 0, right: 0 });
     map.jumpTo({ zoom: proj === 'globe' ? 0.9 : 1.2 });
   }
   updateScale();
   if (saved) {
-    terrainOn = !!saved.terrain; exag = saved.exag || 3; tTerrain.checked = terrainOn; exagEl.value = exag;
+    terrainOn = saved.v >= 3 ? !!saved.terrain : true; exag = saved.exag || 3; exagEl.value = exag;
   }
   applyTerrain(false); applyHirise();
   if (saved && Array.isArray(saved.items)) {
