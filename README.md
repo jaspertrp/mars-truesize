@@ -1,0 +1,27 @@
+# Earth on Mars, true size
+
+An interactive map of Mars where you can drop Earth's countries at their **real size** and drag them around. It works like [thetruesize.com](https://thetruesize.com), but on Mars.
+
+Each country is redrawn at its true dimensions in kilometres. Mars has about half Earth's radius (3,389.5 km vs 6,371 km), so a country covers about 1.9× more of the planet than it does on an Earth map. Switch between a flat Web Mercator map, which stretches shapes towards the poles, and a 3D globe, which doesn't.
+
+**Live map:** https://jaspertrp.github.io/mars-truesize/
+
+## Basemaps
+
+| Basemap | Resolution | Source |
+|---|---|---|
+| Colour (Viking MDIM 2.1) | 232 m | NASA/JPL/USGS |
+| Relief (MOLA/HRSC blended colour shaded relief) | 200 m | NASA/JPL/GSFC/ESA/DLR/FU Berlin/USGS |
+| Infrared (THEMIS day IR, ±65°) | 100 m | NASA/JPL/ASU/USGS |
+| Detail (Global CTX mosaic) | 5 m | NASA/JPL/MSSS/Caltech Murray Lab/Esri |
+| Classic (8k texture, bundled in `tiles/`) | ~2.6 km | [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0 |
+
+The first four are streamed from [NASA Mars Trek](https://trek.nasa.gov/mars/) and Esri's OnMars service. Both serve tiles in a geographic (equirectangular) grid, and the page reprojects them to Web Mercator in the browser through a custom MapLibre protocol (`eq://`). If a tile server can't be reached, the map falls back to the bundled Classic tiles.
+
+Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via `world-atlas`.
+
+## How the true-size projection works
+
+For each country the page computes its spherical centroid on Earth. It then stores every vertex as a (great-circle distance, bearing) pair from that centroid. When you drop or drag the country, each vertex is placed at the same bearing from the new centre on Mars, with its distance multiplied by 6371 / 3389.5. That keeps distances from the centre and directions true. A country is stopped before its shape would wrap over a pole.
+
+Built with [MapLibre GL JS](https://maplibre.org/) (globe projection), d3-geo and topojson-client.
