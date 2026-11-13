@@ -83,7 +83,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>Earth on <span>Mars</span>, true size</h1>
-    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. In flat mode Mercator stretching also grows them towards the poles; switch to the globe to see them undistorted.</p>
+    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -221,14 +221,15 @@ const map = new maplibregl.Map({
     sources: {
       ...baseSources,
       countries: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      outlines: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       grid: { type: 'geojson', data: makeGrid() }
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#e9e2dc' } },
       ...baseLayers,
       { id: 'grid', type: 'line', source: 'grid', layout: { visibility: 'none' }, paint: { 'line-color': '#fff', 'line-opacity': 0.25, 'line-width': 0.7 } },
-      { id: 'c-fill', type: 'fill', source: 'countries', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.55 } },
-      { id: 'c-line', type: 'line', source: 'countries', paint: { 'line-color': '#fff', 'line-width': 1.4 } }
+      { id: 'c-fill', type: 'fill', source: 'countries', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.55, 'fill-antialias': false } },
+      { id: 'c-line', type: 'line', source: 'outlines', paint: { 'line-color': '#fff', 'line-width': 1.4 } }
     ]
   }
 });
@@ -290,13 +291,30 @@ const COUNTRIES = fc.features.filter(f => f.geometry && f.properties && f.proper
   .sort((a, b) => a.name.localeCompare(b.name));
 const byName = new Map(COUNTRIES.map(c => [c.name, c]));
 
+// Clean a country's rings: Natural Earth closes polar shapes with points along ±90° and ±180°,
+// which are degenerate on a sphere. Drop those, drop empty rings, and make sure each polygon's
+// outer ring winds so that it encloses the land (smaller than a hemisphere).
+function cleanPolys(feature) {
+  const g = feature.geometry;
+  const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+  const out = [];
+  for (const poly of polys) {
+    const rings = poly.map(ring => {
+      const r = ring.filter(([, la]) => Math.abs(la) < 89.99)
+        .filter((pt, i, a) => i === 0 || d3.geoDistance(pt, a[i - 1]) > 1e-9);
+      if (r.length && d3.geoDistance(r[0], r[r.length - 1]) > 1e-9) r.push(r[0]);
+      return r;
+    }).filter(r => r.length >= 4);
+    if (!rings.length) continue;
+    if (d3.geoArea({ type: 'Polygon', coordinates: [rings[0]] }) > 2 * Math.PI) rings[0] = rings[0].slice().reverse();
+    out.push(rings);
+  }
+  return out;
+}
 function polarize(feature) {
   const [clon, clat] = d3.geoCentroid(feature);
   const p1 = clat * D2R, l1 = clon * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1);
-  const g = feature.geometry;
-  const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
-  return polys.map(poly => poly.map(ring => {
-    ring = ring.filter(([, la]) => Math.abs(la) < 89.99);
+  return cleanPolys(feature).map(poly => poly.map(ring => {
     const out = new Float64Array(ring.length * 2);
     ring.forEach(([lon, lat], i) => {
       const p2 = lat * D2R, dl = lon * D2R - l1;
@@ -307,11 +325,18 @@ function polarize(feature) {
   }));
 }
 
-let lastMaxAbsLat = 0;
-function placeAt(polar, lat, lon) {
+const ringArea = r => { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]); return a / 2; };
+function pointInRing(pt, r) {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++)
+    if ((r[i][1] > pt[1]) !== (r[j][1] > pt[1]) && pt[0] < (r[j][0] - r[i][0]) * (pt[1] - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside;
+  return inside;
+}
+// Place the country centred at (lat, lon) on Mars: rings of [lon, lat] on the sphere,
+// with longitudes kept continuous along each ring (used for the outlines).
+function placeAt(item, lat, lon) {
   const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1);
-  lastMaxAbsLat = 0;
-  return polar.map(poly => poly.map(arr => {
+  return item.polar.map(poly => poly.map(arr => {
     const n = arr.length / 2, pts = new Array(n);
     let prev = null;
     for (let i = 0; i < n; i++) {
@@ -319,40 +344,57 @@ function placeAt(polar, lat, lon) {
       const sp2 = sp1 * cd + cp1 * sd * Math.cos(b);
       const p2 = Math.asin(Math.max(-1, Math.min(1, sp2)));
       const dl = Math.atan2(Math.sin(b) * sd * cp1, cd - sp1 * sp2);
-      const la = p2 * R2D;
-      if (Math.abs(la) > lastMaxAbsLat) lastMaxAbsLat = Math.abs(la);
       let lo = lon + dl * R2D;
       if (prev !== null) { while (lo - prev > 180) lo -= 360; while (prev - lo > 180) lo += 360; }
       prev = lo;
-      pts[i] = [lo, la];
+      pts[i] = [lo, p2 * R2D];
     }
     return pts;
   }));
 }
-function dest(lon, lat, b, d) {
-  const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1), sd = Math.sin(d), cd = Math.cos(d);
-  const sp2 = sp1 * cd + cp1 * sd * Math.cos(b);
-  const p2 = Math.asin(Math.max(-1, Math.min(1, sp2)));
-  return [lon + Math.atan2(Math.sin(b) * sd * cp1, cd - sp1 * sp2) * R2D, p2 * R2D];
-}
-function fits(item, lat) {
-  placeAt(item.polar, lat, 0);
-  if (lastMaxAbsLat > 86) return false;
-  for (const [b, edge] of [[0, 86], [0, 90], [Math.PI, 86], [Math.PI, 90]]) {
-    const dE = (b === 0 ? edge - lat : edge + lat) * D2R / K;
-    if (dE >= Math.PI) continue;
-    if (d3.geoContains(item.feature, dest(item.c[0], item.c[1], b, dE))) return false;
+// Fill geometry: let d3-geo cut each spherical polygon at the antimeridian and close it over a pole
+// when it covers one, giving plain lon/lat polygons MapLibre can draw in both projections.
+const flatProj = d3.geoEquirectangular().scale(R2D).translate([0, 0]).reflectY(true).precision(0);
+function toPlanar(geom) {
+  // d3's clipper can trip over vertices that fall exactly on its cut lines; retry with a tiny nudge
+  for (const eps of [0, 1e-6, 3.3e-4, 0.01]) {
+    try { return toPlanarOnce(eps ? geom.map(p => p.map(r => r.map(([x, y]) => [x + eps, y + eps * 0.7]))) : geom); }
+    catch (e) { /* try the next nudge */ }
   }
-  return true;
+  const polys = geom.map(p => p); polys.cap = false; return polys;   // last resort: draw unclipped
 }
-function safeLat(item, lat) {
-  if (fits(item, lat)) return lat;
-  if (!fits(item, 0)) return 0;
-  let lo = 0, hi = lat;
-  for (let i = 0; i < 16; i++) { const m = (lo + hi) / 2; if (fits(item, m)) lo = m; else hi = m; }
-  return lo;
+function toPlanarOnce(geom) {
+  const polys = [];
+  let cap = false;
+  for (const rings of geom) {
+    const out = []; let cur = null;
+    d3.geoStream({ type: 'Polygon', coordinates: rings }, flatProj.stream({
+      point(x, y) { cur.push([x, y]); if (Math.abs(y) > 89.9) cap = true; },
+      lineStart() { cur = []; },
+      lineEnd() { if (cur.length > 2) { const f = cur[0], l = cur[cur.length - 1]; if (f[0] !== l[0] || f[1] !== l[1]) cur.push([f[0], f[1]]); out.push(cur); } cur = null; },
+      polygonStart() {}, polygonEnd() {}, sphere() {}
+    }));
+    if (!out.length) continue;
+    // group: rings with the dominant winding are outer rings, the others are holes
+    const withA = out.map(r => ({ r, a: ringArea(r) }));
+    const big = withA.reduce((m, x) => Math.abs(x.a) > Math.abs(m.a) ? x : m);
+    const sgn = Math.sign(big.a);
+    const outers = withA.filter(x => Math.sign(x.a) === sgn).map(x => [x.r]);
+    for (const h of withA.filter(x => Math.sign(x.a) !== sgn)) {
+      const o = outers.find(o => pointInRing(h.r[0], o[0]));
+      if (o) o.push(h.r);
+    }
+    polys.push(...outers);
+  }
+  polys.cap = cap;
+  return polys;
 }
-const clampLat = l => Math.max(-80, Math.min(80, l));
+function setGeom(it) {
+  it.geom = placeAt(it, it.lat, it.lon);
+  it.fill = toPlanar(it.geom);
+  it.label.setLngLat([it.lon, it.lat]);
+}
+const clampLat = l => Math.max(-89.9, Math.min(89.9, l));
 const wrapLon = l => ((l + 180) % 360 + 360) % 360 - 180;
 
 const placed = [];
@@ -365,10 +407,10 @@ function addCountry(name, lat, lon, color) {
   if (lat === undefined) { const ctr = map.getCenter(); lat = ctr.lat; lon = ctr.lng; }
   const item = { id: nextId++, name, color: color || PALETTE[colorIdx++ % PALETTE.length], lon: wrapLon(lon),
     polar: polarize(c.feature), area: c.area, feature: c.feature, c: d3.geoCentroid(c.feature) };
-  item.lat = safeLat(item, clampLat(lat));
+  item.lat = clampLat(lat);
   const el = document.createElement('div'); el.className = 'cname'; el.textContent = name.length > 22 ? name.slice(0, 20) + '…' : name;
   item.label = new maplibregl.Marker({ element: el, opacityWhenCovered: '0' }).setLngLat([item.lon, item.lat]).addTo(map);
-  item.geom = placeAt(item.polar, item.lat, item.lon);
+  setGeom(item);
   placed.push(item);
   refresh(); renderList(); save();
   return item;
@@ -380,9 +422,14 @@ function removeCountry(item) {
 }
 function refresh() {
   const src = map.getSource('countries'); if (!src) return;
-  src.setData({ type: 'FeatureCollection', features: placed.map(p => ({
-    type: 'Feature', id: p.id, properties: { id: p.id, color: p.color },
-    geometry: { type: 'MultiPolygon', coordinates: p.geom } })) });
+  const fills = [], lines = [];
+  for (const p of placed) {
+    for (const poly of p.fill)
+      fills.push({ type: 'Feature', properties: { id: p.id, color: p.color }, geometry: { type: 'Polygon', coordinates: poly } });
+    lines.push({ type: 'Feature', properties: { id: p.id }, geometry: { type: 'MultiLineString', coordinates: p.geom.flat() } });
+  }
+  src.setData({ type: 'FeatureCollection', features: fills });
+  map.getSource('outlines').setData({ type: 'FeatureCollection', features: lines });
 }
 
 // ---------- hover + drag ----------
@@ -419,9 +466,8 @@ function moveDrag(e) {
     const dLat = m.lat - drag.lastLat;
     drag.lastLng = m.lng; drag.lastLat = m.lat;
     it.lon += dLng;
-    it.lat = safeLat(it, clampLat(it.lat + dLat));
-    it.geom = placeAt(it.polar, it.lat, it.lon);
-    it.label.setLngLat([it.lon, it.lat]);
+    it.lat = clampLat(it.lat + dLat);
+    setGeom(it);
     refresh();
   });
 }
@@ -429,7 +475,7 @@ function endDrag() {
   if (!drag) return;
   const it = drag.it; drag = null;
   map.dragPan.enable(); map.getCanvas().style.cursor = '';
-  it.lon = wrapLon(it.lon); it.geom = placeAt(it.polar, it.lat, it.lon); it.label.setLngLat([it.lon, it.lat]);
+  it.lon = wrapLon(it.lon); setGeom(it);
   refresh(); save();
 }
 map.on('mousedown', 'c-fill', startDrag);
@@ -449,6 +495,7 @@ function renderList() {
       <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars</small></span>
       <button title="Remove">✕</button>`;
     row.querySelector('.name').onclick = () => {
+      if (it.fill.cap) { map.flyTo({ center: [it.lon, it.lat], zoom: Math.min(map.getZoom(), 2), duration: 900 }); return; }
       const b = new maplibregl.LngLatBounds();
       it.geom.forEach(poly => poly[0].forEach(p => b.extend(p)));
       map.fitBounds(b, { padding: 80, maxZoom: 5, duration: 900 });

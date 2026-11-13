@@ -22,6 +22,6 @@ Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via
 
 ## How the true-size projection works
 
-For each country the page computes its spherical centroid on Earth. It then stores every vertex as a (great-circle distance, bearing) pair from that centroid. When you drop or drag the country, each vertex is placed at the same bearing from the new centre on Mars, with its distance multiplied by 6371 / 3389.5. That keeps distances from the centre and directions true. A country is stopped before its shape would wrap over a pole.
+For each country the page computes its spherical centroid on Earth. It then stores every vertex as a (great-circle distance, bearing) pair from that centroid. When you drop or drag the country, each vertex is placed at the same bearing from the new centre on Mars, with its distance multiplied by 6371 / 3389.5. That keeps distances from the centre and directions true. Countries can be dragged anywhere, including over the poles: d3-geo cuts each placed shape at the antimeridian and closes it over a pole when the shape covers one, so it renders correctly on both the flat map and the globe.
 
 Built with [MapLibre GL JS](https://maplibre.org/) (globe projection), d3-geo and topojson-client.
