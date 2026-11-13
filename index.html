@@ -53,6 +53,8 @@
   .item .name{flex:1;min-width:0;cursor:pointer}
   .item .name b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .name small{color:var(--muted);font-size:11.5px}
+  .item .rot{color:var(--accent);font-weight:600;margin-left:2px}
+  .item button.rl,.item button.rr{width:24px;font-size:14px}
   .item button{background:none;border:1px solid transparent;color:var(--muted);cursor:pointer;font:inherit;font-size:13px;width:28px;height:28px;border-radius:7px;flex:none}
   .item button:hover{color:var(--text);border-color:var(--line);background:rgba(255,255,255,.05)}
   .empty{padding:10px 8px 14px;color:var(--muted);font-size:12.5px}
@@ -93,7 +95,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>Earth on <span>Mars</span>, true size</h1>
-    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles. Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
+    <p class="sub">Add a country and drag it around. It's drawn at its real size in kilometres on Mars, which has about half Earth's radius, so countries cover about 1.9× more of the map than on Earth. Drag them anywhere, even over the poles, and Shift-drag (or use ↺ ↻) to rotate them. Tilt and rotate with the buttons on the right, right-drag or Ctrl-drag (two fingers on a phone); turn on 3D terrain to see the relief. In flat mode Mercator stretching grows them towards the poles; switch to the globe to see them undistorted.</p>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -109,6 +111,7 @@
   <div class="foot">
     <label><input type="checkbox" id="tFeat" checked> Landmarks</label>
     <label><input type="checkbox" id="tSites" checked> Landers</label>
+    <label><input type="checkbox" id="tNames" checked> Names</label>
     <label><input type="checkbox" id="tGrid"> Grid</label>
     <button id="clear">Clear all</button>
   </div>
@@ -314,6 +317,7 @@ const map = new maplibregl.Map({
   }
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right');
+map.boxZoom.disable();   // Shift-drag is used to rotate countries
 class ViewControl {
   onAdd(m) {
     const el = document.createElement('div');
@@ -431,12 +435,12 @@ function pointInRing(pt, r) {
 // Place the country centred at (lat, lon) on Mars: rings of [lon, lat] on the sphere,
 // with longitudes kept continuous along each ring (used for the outlines).
 function placeAt(item, lat, lon) {
-  const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1);
+  const p1 = lat * D2R, sp1 = Math.sin(p1), cp1 = Math.cos(p1), rot = (item.rot || 0) * D2R;
   return item.polar.map(poly => poly.map(arr => {
     const n = arr.length / 2, pts = new Array(n);
     let prev = null;
     for (let i = 0; i < n; i++) {
-      const d = arr[i * 2], b = arr[i * 2 + 1], sd = Math.sin(d), cd = Math.cos(d);
+      const d = arr[i * 2], b = arr[i * 2 + 1] + rot, sd = Math.sin(d), cd = Math.cos(d);
       const sp2 = sp1 * cd + cp1 * sd * Math.cos(b);
       const p2 = Math.asin(Math.max(-1, Math.min(1, sp2)));
       const dl = Math.atan2(Math.sin(b) * sd * cp1, cd - sp1 * sp2);
@@ -498,13 +502,13 @@ let colorIdx = 0, nextId = 1;
 const fmtArea = km2 => km2 >= 1e6 ? (km2 / 1e6).toFixed(2) + ' M km²' : Math.round(km2).toLocaleString('en') + ' km²';
 const pctMars = km2 => { const p = km2 / MARS_AREA * 100; return p >= 1 ? p.toFixed(1) + '%' : p >= 0.01 ? p.toFixed(2) + '%' : '<0.01%'; };
 
-function addCountry(name, lat, lon, color) {
+function addCountry(name, lat, lon, color, rot) {
   const c = byName.get(name); if (!c) return;
   if (lat === undefined) { const ctr = map.getCenter(); lat = ctr.lat; lon = ctr.lng; }
   const item = { id: nextId++, name, color: color || PALETTE[colorIdx++ % PALETTE.length], lon: wrapLon(lon),
     polar: polarize(c.feature), area: c.area, feature: c.feature, c: d3.geoCentroid(c.feature) };
-  item.lat = clampLat(lat);
-  const el = document.createElement('div'); el.className = 'cname'; el.textContent = name.length > 22 ? name.slice(0, 20) + '…' : name;
+  item.lat = clampLat(lat); item.rot = rot || 0;
+  const el = document.createElement('div'); el.className = 'cname'; el.style.display = showNames ? '' : 'none'; el.textContent = name.length > 22 ? name.slice(0, 20) + '…' : name;
   item.label = new maplibregl.Marker({ element: el, opacityWhenCovered: '0' }).setLngLat([item.lon, item.lat]).addTo(map);
   setGeom(item);
   placed.push(item);
@@ -537,7 +541,7 @@ map.on('mousemove', 'c-fill', e => {
   if (drag) return;
   const it = findItem(e); if (!it) return;
   map.getCanvas().style.cursor = 'grab';
-  popup.setLngLat(e.lngLat).setHTML(`<b>${it.name}</b><br>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars`).addTo(map);
+  popup.setLngLat(e.lngLat).setHTML(`<b>${it.name}</b><br>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars<br><span style="color:var(--muted)">Drag to move · Shift-drag to rotate</span>`).addTo(map);
 });
 map.on('mouseleave', 'c-fill', () => { if (!drag) { map.getCanvas().style.cursor = ''; popup.remove(); } });
 
@@ -547,7 +551,9 @@ function startDrag(e) {
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
   const it = findItem(e); if (!it) return;
   e.preventDefault();
-  drag = { it, lastLng: e.lngLat.lng, lastLat: e.lngLat.lat };
+  const rotating = !oe.touches && (oe.shiftKey || oe.altKey);
+  drag = { it, lastLng: e.lngLat.lng, lastLat: e.lngLat.lat, rotating,
+    startRot: it.rot || 0, startBearing: rotating ? bearingDeg([it.lon, it.lat], [e.lngLat.lng, e.lngLat.lat]) : 0 };
   map.dragPan.disable();
   map.getCanvas().style.cursor = 'grabbing';
   popup.remove();
@@ -560,6 +566,12 @@ function moveDrag(e) {
   if (raf) return;
   raf = requestAnimationFrame(() => {
     raf = 0; const m = pending, it = drag && drag.it; if (!it) return;
+    if (drag.rotating) {                       // turn the country around its centre, following the pointer
+      let a = drag.startRot + bearingDeg([it.lon, it.lat], [m.lng, m.lat]) - drag.startBearing;
+      it.rot = ((a % 360) + 540) % 360 - 180;
+      setGeom(it); refresh(); renderRot(it);
+      return;
+    }
     let dLng = m.lng - drag.lastLng; dLng = ((dLng + 540) % 360) - 180;   // shortest way round
     const dLat = m.lat - drag.lastLat;
     drag.lastLng = m.lng; drag.lastLat = m.lat;
@@ -569,6 +581,15 @@ function moveDrag(e) {
     refresh();
   });
 }
+function bearingDeg(a, b) {                   // initial great-circle bearing from a to b, degrees
+  const p1 = a[1] * D2R, p2 = b[1] * D2R, dl = (b[0] - a[0]) * D2R;
+  return Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * R2D;
+}
+function rotateBy(it, deg) {
+  it.rot = ((((it.rot || 0) + deg) % 360) + 540) % 360 - 180;
+  setGeom(it); refresh(); renderRot(it); save();
+}
+function renderRot(it) { const el = document.querySelector(`.item[data-id="${it.id}"] .rot`); if (el) el.textContent = Math.round(it.rot || 0) ? Math.round(it.rot) + '°' : ''; }
 function endDrag() {
   if (!drag) return;
   const it = drag.it; drag = null;
@@ -588,18 +609,22 @@ function renderList() {
   if (!placed.length) { listEl.innerHTML = '<div class="empty">No countries yet. Search above, then drag the shape across Mars.</div>'; return; }
   listEl.innerHTML = '';
   for (const it of placed.slice().sort((a, b) => b.id - a.id)) {
-    const row = document.createElement('div'); row.className = 'item';
+    const row = document.createElement('div'); row.className = 'item'; row.dataset.id = it.id;
     row.innerHTML = `<span class="chip" style="background:${it.color}"></span>
-      <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars</small></span>
-      <button title="Remove">✕</button>`;
+      <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars <span class="rot"></span></small></span>
+      <button class="rl" title="Rotate left 15° (or Shift-drag the country)">↺</button><button class="rr" title="Rotate right 15°">↻</button>
+      <button class="rm" title="Remove">✕</button>`;
+    row.querySelector('.rl').onclick = () => rotateBy(it, -15);
+    row.querySelector('.rr').onclick = () => rotateBy(it, 15);
+    row.querySelector('.rl').ondblclick = row.querySelector('.rr').ondblclick = e => { e.preventDefault(); it.rot = 0; setGeom(it); refresh(); renderRot(it); save(); };
     row.querySelector('.name').onclick = () => {
       if (it.fill.cap) { map.flyTo({ center: [it.lon, it.lat], zoom: Math.min(map.getZoom(), 2), duration: 900 }); return; }
       const b = new maplibregl.LngLatBounds();
       it.geom.forEach(poly => poly[0].forEach(p => b.extend(p)));
       map.fitBounds(b, { padding: 80, maxZoom: 5, duration: 900 });
     };
-    row.querySelector('button').onclick = () => removeCountry(it);
-    listEl.appendChild(row);
+    row.querySelector('.rm').onclick = () => removeCountry(it);
+    listEl.appendChild(row); renderRot(it);
   }
 }
 
@@ -647,6 +672,9 @@ segBtns.forEach(b => b.classList.toggle('on', b.dataset.p === proj));
 const showMarkers = (arr, on) => arr.forEach(m => on ? m.addTo(map) : m.remove());
 document.getElementById('tFeat').onchange = e => showMarkers(featMarkers, e.target.checked);
 document.getElementById('tSites').onchange = e => showMarkers(siteMarkers, e.target.checked);
+let showNames = !(saved && saved.names === false);
+const tNames = document.getElementById('tNames'); tNames.checked = showNames;
+tNames.onchange = () => { showNames = tNames.checked; for (const p of placed) p.label.getElement().style.display = showNames ? '' : 'none'; save(); };
 document.getElementById('tGrid').onchange = e => map.setLayoutProperty('grid', 'visibility', e.target.checked ? 'visible' : 'none');
 document.getElementById('clear').onclick = () => { while (placed.length) removeCountry(placed[0]); colorIdx = 0; };
 
@@ -694,7 +722,8 @@ exagEl.onchange = () => save();
 
 // ---------- persistence (this browser only) ----------
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? 'viking' : wantedBase, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon })),
+  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? 'viking' : wantedBase, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
+    names: typeof showNames === 'undefined' ? true : showNames,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 3 : exag })); } catch (e) {}
 }
 
@@ -710,7 +739,7 @@ map.on('load', () => {
   }
   applyTerrain(false);
   if (saved && Array.isArray(saved.items)) {
-    saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c)); colorIdx = saved.items.length;
+    saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c, p.r)); colorIdx = saved.items.length;
   } else {
     addCountry('United States of America', -12, -62);   // over Valles Marineris
     addCountry('Netherlands', 18.65, -133.8);            // on Olympus Mons
