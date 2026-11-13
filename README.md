@@ -1,4 +1,4 @@
-# Earth on Mars, true size
+# True Size of Mars
 
 An interactive map of Mars where you can drop Earth's countries at their **real size** and drag them around. It works like [thetruesize.com](https://thetruesize.com), but on Mars.
 
