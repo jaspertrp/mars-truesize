@@ -160,7 +160,7 @@ const KEY = 'mars-truesize-v2';
 
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
-const startProj = (saved && saved.proj) || 'globe';
+const startProj = 'globe';   // always open on the globe; the flat map is one click away
 
 // ---------- map ----------
 // ---------- basemaps ----------
