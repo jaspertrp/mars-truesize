@@ -219,6 +219,9 @@ function showToast(t) {
 // ---------- elevation ----------
 // Esri's OnMars MDEM200M service: MOLA/HRSC blended DEM (200 m), LERC-compressed float tiles in a geographic grid.
 // The 'dem://' protocol samples them into Web Mercator terrarium-encoded tiles for MapLibre terrain + hillshade.
+// Heights are measured from the floor of Hellas (≈ −8.2 km below the Mars datum) so the terrain is never below
+// MapLibre's "sea level"; deep negative terrain under a tilted camera breaks MapLibre's clipping planes.
+const DEM_OFFSET = 8300;
 const DEM_URL = (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/MDEM200M/ImageServer/tile/${z}/${r}/${c}`;
 let lercReady = null;
 const ensureLerc = () => lercReady || (lercReady = Lerc.load({ locateFile: f => 'https://cdn.jsdelivr.net/npm/lerc@4.3.0/' + f }));
@@ -265,6 +268,7 @@ maplibregl.addProtocol('dem', async params => {
         h = (a * (1 - ax) + b * ax) * (1 - ay) + (e * (1 - ax) + f * ax) * ay;
         if (!(h > -20000 && h < 30000)) h = 0;
       }
+      h += DEM_OFFSET;
       const v = h + 32768, k = (j * W + i) * 4;
       d[k] = v >> 8; d[k + 1] = Math.floor(v) & 255; d[k + 2] = Math.floor((v - Math.floor(v)) * 256); d[k + 3] = 255;
     }
@@ -802,7 +806,7 @@ const objLayer = {
     const P = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix);
     const S = new THREE.Matrix4().makeScale(MARS_SCALE, MARS_SCALE, MARS_SCALE);
     for (const o of objects) {
-      const alt = terrainOn ? (map.queryTerrainElevation([o.lng, o.lat]) || 0) : 0;
+      const alt = terrainOn && map.terrain ? map.terrain.getElevationForLngLatZoom(new maplibregl.LngLat(o.lng, o.lat), map.transform.tileZoom) : 0;
       const M = new THREE.Matrix4().fromArray(map.transform.getMatrixForModel([o.lng, o.lat], alt));
       this.camera.projectionMatrix = P.clone().multiply(M).multiply(S);
       for (const q of objects) q.group.visible = q === o;
