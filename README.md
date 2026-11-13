@@ -18,11 +18,10 @@ Each country is redrawn at its true dimensions in kilometres. Mars has about hal
 
 The first four are streamed from [NASA Mars Trek](https://trek.nasa.gov/mars/) and Esri's OnMars service. Both serve tiles in a geographic (equirectangular) grid, and the page reprojects them to Web Mercator in the browser through a custom MapLibre protocol (`eq://`). If a tile server can't be reached, the map falls back to the bundled Classic tiles.
 
-## 3D terrain and landmarks
+## 3D terrain
 
 - **3D terrain** uses Esri's OnMars `MDEM200M` elevation service (MOLA/HRSC blended DEM, 200 m; NASA/ESA/DLR/FU Berlin/GSFC/USGS). Its LERC-compressed float tiles are decoded in the browser with [lerc](https://github.com/Esri/lerc) and resampled into Web Mercator terrarium tiles for MapLibre terrain and hillshade (`dem://` protocol). Heights are measured from the floor of Hellas. Service levels above 6 are skipped because level 7 is wrong in places.
-- **Height ×** exaggerates terrain *and* landmarks by the same factor, so comparisons stay honest; 1× is true scale. MapLibre draws an Earth-sized planet, so all heights are additionally multiplied by 6378.137 / 3389.5 to keep Mars proportions.
-- **Landmarks** (Eiffel Tower, Empire State Building, Burj Khalifa, Great Pyramid, Saturn V, Mount Everest) are simple procedural [three.js](https://threejs.org) models at real height, rendered in a MapLibre custom layer. They stand on the terrain and can be moved by dragging their pin. Everest is stylised: an 8,849 m peak on an ~18 km base.
+- **Height ×** sets the vertical exaggeration; 1× is true scale. MapLibre draws an Earth-sized planet, so heights are additionally multiplied by 6378.137 / 3389.5 to keep Mars proportions.
 
 Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via `world-atlas`.
 
