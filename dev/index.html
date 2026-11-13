@@ -256,7 +256,7 @@ maplibregl.addProtocol('dem', async params => {
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
   const latN = tile2lat(yy, n), latS = tile2lat(yy + 1, n);
   const boost = Math.min(2, Math.max(0, Math.floor(Math.log2(1 / Math.cos(((latN + latS) / 2) * D2R)))));
-  const zs = Math.max(0, Math.min(7, zz - 1 + boost));
+  const zs = Math.max(0, Math.min(6, zz - 1 + boost));   // level 7 of the service is unreliable in places
   const span = 180 / 2 ** zs, cols = 2 ** (zs + 1), rows = 2 ** zs;
   const c0 = Math.floor((lon0 + 180) / span), c1 = Math.floor((lon0 + lonSpan + 180 - 1e-9) / span);
   const r0 = Math.max(0, Math.floor((90 - latN) / span)), r1 = Math.min(rows - 1, Math.floor((90 - latS - 1e-9) / span));
@@ -315,8 +315,8 @@ const map = new maplibregl.Map({
       countries: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       outlines: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       grid: { type: 'geojson', data: makeGrid() },
-      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 8 },
-      demHs: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 8 }
+      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 },
+      demHs: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 }
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#e9e2dc' } },
@@ -705,7 +705,8 @@ async function rebaseTerrain() {
   }
   if (b === demBase) return;
   demBase = b;
-  for (const id of ['dem', 'demHs']) map.getSource(id).setTiles([`dem://{z}/{x}/{y}?b=${b}`]);
+  for (const id of ['dem', 'demHs']) { map.getSource(id).setTiles([`dem://{z}/{x}/{y}?b=${b}`]); if (map.refreshTiles) map.refreshTiles(id); }
+  map.triggerRepaint();
 }
 map.on('moveend', rebaseTerrain);
 tTerrain.onchange = () => { terrainOn = tTerrain.checked; applyTerrain(true); rebaseTerrain(); save(); };
