@@ -63,12 +63,15 @@
   .sugg{position:absolute;left:16px;right:16px;top:44px;background:#1d1411;border:1px solid var(--line);border-radius:9px;max-height:260px;overflow:auto;display:none;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.5)}
   .sugg div{padding:8px 12px;font-size:13.5px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
   .sugg div small{color:var(--muted)}
+  .sugg div span em{display:block;font-style:normal;font-size:11px;color:var(--muted);margin-top:1px}
+  .sugg div span small{font-size:11.5px}
   .sugg div.active,.sugg div:hover{background:rgba(255,138,76,.18)}
   .list{overflow:auto;padding:0 10px 6px;flex:1;min-height:0}
   .item{display:flex;align-items:center;gap:10px;padding:8px 6px;border-top:1px solid var(--line);font-size:13.5px}
   .item:first-child{border-top:none}
   .chip{width:14px;height:14px;border-radius:4px;flex:none;border:1.5px solid rgba(255,255,255,.6)}
   .item .name{flex:1;min-width:0;cursor:pointer}
+  .item .name b i{font-style:normal;font-weight:400;color:var(--muted)}
   .item .name b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .name small{color:var(--muted);font-size:11.5px}
   .item .rot{color:var(--accent);font-weight:600;margin-left:2px}
@@ -124,7 +127,7 @@
     <label class="exag" id="exagWrap" title="Vertical exaggeration. 1× = true proportions">Height <input type="range" id="exag" min="1" max="10" step="0.5" value="3"><span id="exagVal">3×</span></label>
   </div>
   <div class="search">
-    <input id="q" type="text" placeholder="Add a country…" autocomplete="off" spellcheck="false">
+    <input id="q" type="text" placeholder="Add a country or province…" autocomplete="off" spellcheck="false">
     <div class="sugg" id="sugg"></div>
   </div>
   <div class="list" id="list"></div>
@@ -420,9 +423,28 @@ const siteMarkers = SITES.map(([n, la, lo]) => labelMarker(n, 'site', la, lo, 'l
 // ---------- countries ----------
 const fc = topojson.feature(TOPO, TOPO.objects.countries);
 const COUNTRIES = fc.features.filter(f => f.geometry && f.properties && f.properties.name)
-  .map(f => ({ name: f.properties.name, feature: f, area: d3.geoArea(f) * R_EARTH * R_EARTH }))
+  .map(f => ({ key: f.properties.name, name: f.properties.name, kind: 'Country', feature: f, area: d3.geoArea(f) * R_EARTH * R_EARTH }))
   .sort((a, b) => a.name.localeCompare(b.name));
-const byName = new Map(COUNTRIES.map(c => [c.name, c]));
+const SHAPES = COUNTRIES.slice();                       // countries now, provinces once loaded
+const byKey = new Map(COUNTRIES.map(c => [c.key, c]));
+
+// provinces / states (Natural Earth admin-1), loaded on demand from provinces.json
+let provincesPromise = null;
+function ensureProvinces() {
+  return provincesPromise || (provincesPromise = fetch(new URL('provinces.json', location.href))
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(t => {
+      const list = topojson.feature(t, t.objects.provinces).features
+        .filter(f => f.geometry && f.properties && f.properties.name)
+        .map(f => { const p = f.properties; return { key: 'p:' + p.adm1_code, name: p.name, alt: p.name_en && p.name_en !== p.name ? p.name_en : '',
+          country: p.admin, kind: p.type_en || 'Province', feature: f, area: null }; });
+      for (const c of list) { SHAPES.push(c); byKey.set(c.key, c); }
+      if (document.activeElement === q) showSugg();
+      return list.length;
+    })
+    .catch(e => { provincesPromise = null; console.warn('provinces not loaded', e); return 0; }));
+}
+const areaOf = c => c.area != null ? c.area : (c.area = d3.geoArea(c.feature) * R_EARTH * R_EARTH);
 
 // Clean a country's rings: Natural Earth closes polar shapes with points along ±90° and ±180°,
 // which are degenerate on a sphere. Drop those, drop empty rings, and make sure each polygon's
@@ -535,11 +557,12 @@ let colorIdx = 0, nextId = 1;
 const fmtArea = km2 => km2 >= 1e6 ? (km2 / 1e6).toFixed(2) + ' M km²' : Math.round(km2).toLocaleString('en') + ' km²';
 const pctMars = km2 => { const p = km2 / MARS_AREA * 100; return p >= 1 ? p.toFixed(1) + '%' : p >= 0.01 ? p.toFixed(2) + '%' : '<0.01%'; };
 
-function addCountry(name, lat, lon, color, rot) {
-  const c = byName.get(name); if (!c) return;
+function addCountry(key, lat, lon, color, rot) {
+  const c = byKey.get(key); if (!c) return;
+  const name = c.name;
   if (lat === undefined) { const ctr = map.getCenter(); lat = ctr.lat; lon = ctr.lng; }
-  const item = { id: nextId++, name, color: color || PALETTE[colorIdx++ % PALETTE.length], lon: wrapLon(lon),
-    polar: polarize(c.feature), area: c.area, feature: c.feature, c: d3.geoCentroid(c.feature) };
+  const item = { id: nextId++, key, name, country: c.country || '', color: color || PALETTE[colorIdx++ % PALETTE.length], lon: wrapLon(lon),
+    polar: polarize(c.feature), area: areaOf(c), feature: c.feature, c: d3.geoCentroid(c.feature) };
   item.lat = clampLat(lat); item.rot = rot || 0;
   const el = document.createElement('div'); el.className = 'cname'; el.style.display = showNames ? '' : 'none'; el.textContent = name.length > 22 ? name.slice(0, 20) + '…' : name;
   item.label = new maplibregl.Marker({ element: el, opacityWhenCovered: '0' }).setLngLat([item.lon, item.lat]).addTo(map);
@@ -655,7 +678,7 @@ function renderList() {
   for (const it of placed.slice().sort((a, b) => b.id - a.id)) {
     const row = document.createElement('div'); row.className = 'item'; row.dataset.id = it.id;
     row.innerHTML = `<span class="chip" style="background:${it.color}"></span>
-      <span class="name" title="Fly to"><b>${it.name}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars <span class="rot"></span></small></span>
+      <span class="name" title="Fly to"><b>${it.name}${it.country ? `<i> · ${it.country}</i>` : ''}</b><small>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars <span class="rot"></span></small></span>
       <button class="rm" title="Remove">✕</button>`;
     row.querySelector('.name').onclick = () => flyToCountry(it);
     row.querySelector('.rm').onclick = () => removeCountry(it);
@@ -669,15 +692,23 @@ let matches = [], active = 0;
 function showSugg() {
   const s = q.value.trim().toLowerCase();
   if (!s) { sugg.style.display = 'none'; return; }
-  matches = COUNTRIES.filter(c => c.name.toLowerCase().includes(s))
-    .sort((a, b) => b.name.toLowerCase().startsWith(s) - a.name.toLowerCase().startsWith(s)).slice(0, 30);
+  ensureProvinces();
+  const norm = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const ns = norm(s);
+  const score = c => {
+    const n = norm(c.name), a = c.alt ? norm(c.alt) : '';
+    const r = n === ns || a === ns ? 0 : n.startsWith(ns) || a.startsWith(ns) ? 1 : n.includes(ns) || a.includes(ns) ? 2 : 9;
+    return r * 2 + (c.country ? 1 : 0);                 // countries before provinces at the same rank
+  };
+  matches = SHAPES.map(c => [score(c), c]).filter(x => x[0] < 18).sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name)).slice(0, 40).map(x => x[1]);
   active = 0;
+  const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
   sugg.innerHTML = matches.length ? matches.map((c, i) =>
-    `<div data-i="${i}" class="${i === 0 ? 'active' : ''}"><span>${c.name}</span><small>${fmtArea(c.area)}</small></div>`).join('')
-    : '<div style="cursor:default;color:var(--muted)">No match</div>';
+    `<div data-i="${i}" class="${i === 0 ? 'active' : ''}"><span>${esc(c.name)}${c.alt ? ` <small>(${esc(c.alt)})</small>` : ''}<em>${c.country ? esc(c.kind) + ' · ' + esc(c.country) : 'Country'}</em></span><small>${fmtArea(areaOf(c))}</small></div>`).join('')
+    : `<div style="cursor:default;color:var(--muted)">${provincesPromise ? 'No match' : 'Loading…'}</div>`;
   sugg.style.display = 'block';
 }
-function pick(i) { const c = matches[i]; if (!c) return; q.value = ''; sugg.style.display = 'none'; addCountry(c.name); }
+function pick(i) { const c = matches[i]; if (!c) return; q.value = ''; sugg.style.display = 'none'; addCountry(c.key); }
 q.addEventListener('input', showSugg); q.addEventListener('focus', showSugg);
 q.addEventListener('keydown', e => {
   const rows = sugg.querySelectorAll('div[data-i]');
@@ -787,8 +818,10 @@ exagEl.oninput = () => { exag = +exagEl.value; applyTerrain(false); map.triggerR
 exagEl.onchange = () => save();
 
 // ---------- persistence (this browser only) ----------
+let restoring = false;                  // don't overwrite the saved list while it is being restored
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 3, items: placed.map(p => ({ n: p.name, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
+  if (restoring) return;
+  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 3, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
     hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 3 : exag })); } catch (e) {}
@@ -806,7 +839,9 @@ map.on('load', () => {
   }
   applyTerrain(false); applyHirise();
   if (saved && Array.isArray(saved.items)) {
-    saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c, p.r)); colorIdx = saved.items.length;
+    restoring = true;
+    const restore = () => { saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c, p.r)); colorIdx = saved.items.length; restoring = false; save(); };
+    if (saved.items.some(p => String(p.n).startsWith('p:'))) ensureProvinces().then(restore); else restore();
   } else {
     addCountry('United States of America', -12, -62);   // over Valles Marineris
     addCountry('Netherlands', 18.65, -133.8);            // on Olympus Mons

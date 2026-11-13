@@ -1,6 +1,6 @@
 # True Size of Mars
 
-An interactive map of Mars where you can drop Earth's countries at their **real size** and drag them around. It works like [thetruesize.com](https://thetruesize.com), but on Mars.
+An interactive map of Mars where you can drop Earth's countries and provinces at their **real size** and drag them around. It works like [thetruesize.com](https://thetruesize.com), but on Mars.
 
 Each country is redrawn at its true dimensions in kilometres. Mars has about half Earth's radius (3,389.5 km vs 6,371 km), so a country covers about 1.9× more of the planet than it does on an Earth map. Switch between a flat Web Mercator map, which stretches shapes towards the poles, and a 3D globe, which doesn't.
 
@@ -24,7 +24,7 @@ The first four are streamed from [NASA Mars Trek](https://trek.nasa.gov/mars/) a
 - **3D terrain** uses Esri's OnMars `MDEM200M` elevation service (MOLA/HRSC blended DEM, 200 m; NASA/ESA/DLR/FU Berlin/GSFC/USGS). Its LERC-compressed float tiles are decoded in the browser with [lerc](https://github.com/Esri/lerc) and resampled into Web Mercator terrarium tiles for MapLibre terrain (`dem://` protocol). Heights are measured from the floor of Hellas. Service levels above 6 are skipped because level 7 is wrong in places.
 - **Height ×** sets the vertical exaggeration; 1× is true scale. MapLibre draws an Earth-sized planet, so heights are additionally multiplied by 6378.137 / 3389.5 to keep Mars proportions.
 
-Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via `world-atlas`.
+Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via `world-atlas`. Provinces and states (4,596 first-level divisions) come from Natural Earth's 1:10m admin-1 layer, simplified with mapshaper to `provinces.json`, which loads only when you start searching.
 
 ## How the true-size projection works
 
