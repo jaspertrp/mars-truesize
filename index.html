@@ -2213,6 +2213,140 @@ function buildJet() {
   return { g, flames };
 }
 
+// ---------- the view from high up (jet) ----------
+// The jet flies over MapLibre's flat Web Mercator map, which has no horizon curve and no rings. This layer ray-traces
+// the real planet from the jet's camera: rings (on Saturn) at any height, and the whole planet - a textured ellipsoid
+// in black space - that takes over from the flat map as you climb (fully above ~4% of the planet's radius).
+const spaceTex = new Map();     // base key -> { tex, ready }
+function spaceTexture(gl, bm) {
+  let t = spaceTex.get(bm);
+  if (t) return t;
+  t = { tex: gl.createTexture(), ready: false }; spaceTex.set(bm, t);
+  const N = 4, cv = document.createElement('canvas'); cv.width = cv.height = N * 512;
+  const cx = cv.getContext('2d'), jobs = [];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const img = BASEMAPS[bm] && BASEMAPS[bm].local
+      ? fetch(new URL(`tiles/2/${x}/${y}.jpg`, location.href).href).then(r => r.ok ? r.blob() : null).then(b => b && createImageBitmap(b))
+      : renderEq(bm, 2, x, y, true);
+    jobs.push(Promise.resolve(img).then(im => { if (im) cx.drawImage(im, x * 512, y * 512, 512, 512); }).catch(() => {}));
+  }
+  Promise.all(jobs).then(() => {
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    t.ready = true; map.triggerRepaint();
+  });
+  return t;
+}
+const R_EQ_M = R_BODY * 1000;   // equatorial radius in metres (the unit of the ray tracer)
+const spaceLayer = {
+  id: 'space-view', type: 'custom', renderingMode: '3d',
+  onAdd(m, gl) {
+    const vs = `attribute vec2 a_pos; varying vec2 v_ndc; void main() { v_ndc = a_pos; gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+    const fs = `
+      precision highp float;
+      varying vec2 v_ndc;
+      uniform vec3 u_o, u_F, u_R, u_U;     // camera position and axes, in equatorial radii (y = spin axis)
+      uniform float u_tx, u_ty, u_q, u_w, u_rings, u_rin, u_rout, u_hasPlanet;
+      uniform sampler2D u_planet, u_ring;
+      void main() {
+        vec3 d = normalize(u_F + v_ndc.x * u_tx * u_R + v_ndc.y * u_ty * u_U), o = u_o;
+        // planet: the ellipsoid x^2 + (y/q)^2 + z^2 = 1
+        vec3 os = vec3(o.x, o.y / u_q, o.z), ds = vec3(d.x, d.y / u_q, d.z);
+        float a = dot(ds, ds), b = dot(os, ds), c = dot(os, os) - 1.0, h = b * b - a * c, tp = -1.0;
+        if (h > 0.0) { tp = (-b - sqrt(h)) / a; }
+        vec4 col = vec4(0.0, 0.0, 0.0, u_w);                       // black space, as strong as the planet
+        if (tp > 0.0) {
+          vec3 p = normalize(os + tp * ds);
+          float beta = asin(clamp(p.y, -0.9985, 0.9985)), lng = atan(p.x, p.z);
+          float v = 0.5 - log(tan(0.7853982 + beta * 0.5)) / 6.2831853;
+          vec3 t = u_hasPlanet > 0.5 ? texture2D(u_planet, vec2(lng / 6.2831853 + 0.5, clamp(v, 0.0, 1.0))).rgb : vec3(0.5);
+          vec3 n = normalize(vec3(p.x, p.y / u_q, p.z));
+          float limb = 0.55 + 0.45 * sqrt(max(0.0, dot(n, -d)));
+          col = vec4(t * limb * u_w, u_w);
+        }
+        if (u_rings > 0.5 && abs(d.y) > 1e-6) {
+          float tr = -o.y / d.y;
+          if (tr > 0.0 && (tp < 0.0 || tr < tp)) {
+            float r = length((o + tr * d).xz);
+            if (r > u_rin && r < u_rout) {
+              vec4 rt = texture2D(u_ring, vec2((r - u_rin) / (u_rout - u_rin), 0.5));
+              float al = 1.0 - exp(-rt.a * 6.0 / max(abs(d.y), 0.02));
+              col = vec4(rt.rgb * al, al) + col * (1.0 - al);
+            }
+          }
+        }
+        if (col.a <= 0.002) discard;
+        gl_FragColor = col;
+      }`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(o)); return o; };
+    const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+    this.prog = prog;
+    this.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    if (SATURN) {
+      const { n, px } = ringTexture();
+      this.ring = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.ring);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    const U = nm => gl.getUniformLocation(prog, nm);
+    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), F: U('u_F'), R: U('u_R'), U: U('u_U'), tx: U('u_tx'), ty: U('u_ty'),
+      q: U('u_q'), w: U('u_w'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
+  },
+  render(gl) {
+    const V = FL.on && FL.view;
+    if (!V) return;
+    const hEq = V.agl / R_EQ_M, w = Math.min(1, Math.max(0, (hEq - 0.008) / (0.04 - 0.008)));
+    const rings = SATURN && ringsOn;
+    if (w <= 0 && !rings) return;
+    // camera position on the (squashed) planet: map latitude = reduced latitude
+    const lam = V.lng * D2R, be = V.lat * D2R, cb = Math.cos(be), sb = Math.sin(be);
+    const sx = Math.sin(lam), cz = Math.cos(lam);
+    const nrm = [cb * sx, sb / Q, cb * cz], nl = Math.hypot(...nrm); nrm[0] /= nl; nrm[1] /= nl; nrm[2] /= nl;
+    const hh = V.alt / R_EQ_M;
+    const o = [cb * sx + nrm[0] * hh, Q * sb + nrm[1] * hh, cb * cz + nrm[2] * hh];
+    // local east / north / up in the same frame
+    const E = [cz, 0, -sx], Nn = [nrm[1] * E[2] - nrm[2] * E[1], nrm[2] * E[0] - nrm[0] * E[2], nrm[0] * E[1] - nrm[1] * E[0]];
+    const toW = v => [v[0] * E[0] + v[1] * Nn[0] + v[2] * nrm[0], v[0] * E[1] + v[1] * Nn[1] + v[2] * nrm[1], v[0] * E[2] + v[1] * Nn[2] + v[2] * nrm[2]];
+    const F = toW(V.F), up0 = toW([0, 0, 1]);
+    const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const nz = v => { const l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    let R = nz(cr(F, up0)), Up = cr(R, F);
+    const ca = Math.cos(V.roll), sa = Math.sin(V.roll);
+    [R, Up] = [[R[0] * ca + Up[0] * sa, R[1] * ca + Up[1] * sa, R[2] * ca + Up[2] * sa], [Up[0] * ca - R[0] * sa, Up[1] * ca - R[1] * sa, Up[2] * ca - R[2] * sa]];
+    const fov = (map.transform.fov || 36.87) * D2R, cvs = map.getCanvas(), ty = Math.tan(fov / 2), tx = ty * cvs.width / cvs.height;
+    const L = this.loc, pt = w > 0 ? spaceTexture(gl, baseKey) : null;
+    gl.useProgram(this.prog);
+    gl.uniform3f(L.o, ...o); gl.uniform3f(L.F, ...F); gl.uniform3f(L.R, ...R); gl.uniform3f(L.U, ...Up);
+    gl.uniform1f(L.tx, tx); gl.uniform1f(L.ty, ty); gl.uniform1f(L.q, Q); gl.uniform1f(L.w, w);
+    gl.uniform1f(L.rings, rings ? 1 : 0); gl.uniform1f(L.rin, SATURN ? RING_IN : 0); gl.uniform1f(L.rout, SATURN ? RING_OUT : 0);
+    gl.uniform1f(L.has, pt && pt.ready ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, pt && pt.ready ? pt.tex : null); gl.uniform1i(L.planet, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.ring || null); gl.uniform1i(L.ring, 1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(L.pos); gl.vertexAttribPointer(L.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.depthMask(true);
+  }
+};
+function setGroundHidden(hide) {
+  if (!!FL.groundHidden === !!hide) return;
+  FL.groundHidden = !!hide;
+  for (const l of map.getStyle().layers) {
+    if (!/^(base-|ov-|c-|dem)/.test(l.id) && l.type !== 'hillshade') continue;
+    if (hide) { FL.hiddenVis = FL.hiddenVis || {}; FL.hiddenVis[l.id] = map.getLayoutProperty(l.id, 'visibility') || 'visible'; map.setLayoutProperty(l.id, 'visibility', 'none'); }
+    else if (FL.hiddenVis && FL.hiddenVis[l.id]) map.setLayoutProperty(l.id, 'visibility', FL.hiddenVis[l.id]);
+  }
+  if (!hide) FL.hiddenVis = null;
+  if (HAS_TERRAIN) map.setTerrain(hide ? null : { source: 'dem', exaggeration: BODY_SCALE * exag });
+}
 function makeJetLayer() {
   const T = THREE, scene = new T.Scene(), cam = new T.Camera();
   scene.add(new T.HemisphereLight(0xffffff, 0x555555, 1.0));
@@ -2232,7 +2366,7 @@ function makeJetLayer() {
     render(gl, args) {
       if (!FL.on) return;
       const mc = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0), mu = mc.meterInMercatorCoordinateUnits();
-      const l = new T.Matrix4().makeTranslation(FL.mx, FL.my, FL.alt * mu).scale(new T.Vector3(mu, -mu, mu));
+      const l = new T.Matrix4().makeTranslation(FL.mx, FL.my, (FL.da != null ? FL.da : FL.alt) * mu).scale(new T.Vector3(mu, -mu, mu));
       cam.projectionMatrix = new T.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(l);
       renderer.resetState(); renderer.render(scene, cam);
     }
@@ -2302,11 +2436,12 @@ function flyStep(t) {
     FL.v += (target - FL.v) * Math.min(1, dt * (k.boost ? 0.7 : 0.45));
     FL.v -= G_MOON * f.z * dt * M;                       // climbing costs speed, diving gives it back
     FL.v = Math.max(JET.vmin * 0.5 * M, FL.v);
-    // --- move ---
-    const d = FL.v * dt * BS;
+    // --- move ---  (the higher you are, the faster you go: speed grows with height above 20 km, so space is reachable)
+    FL.af = Math.max(1, (FL.alt - (FL.g || 0)) / BS / 20000);
+    const d = FL.v * FL.af * dt * BS;
     FL.mx += f.x * d * mu; FL.my -= f.y * d * mu; FL.alt += f.z * d;
     FL.my = Math.min(0.97, Math.max(0.03, FL.my));
-    FL.alt = Math.min(FL.alt, 120000 * BS);
+    FL.alt = Math.min(FL.alt, 40 * R_BODY * 1000 * BS);   // up to 40 planet radii
     FL.heading = Math.atan2(f.x, f.y) * R2D; FL.climb = Math.asin(Math.max(-1, Math.min(1, f.z)));
     FL.bank = bank;
     // --- ground ---
@@ -2336,39 +2471,48 @@ function flyStep(t) {
   mu = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).meterInMercatorCoordinateUnits();
   const pos = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).toLngLat(), mpd = 111319.49, cl = Math.cos(pos.lat * D2R);
   const at = (east, north) => [pos.lng + east / (mpd * cl), pos.lat + north / mpd];
+  // MapLibre can't handle a camera thousands of km up; above the height where space hides the ground, the map's camera
+  // (and the jet drawn in it) stays at a fixed height while the real altitude keeps growing for the ray-traced view
+  FL.da = Math.min(FL.alt, 0.06 * R_EQ_M * BS);
   FL.camYaw += Math.atan2(Math.sin((FL.heading - FL.camYaw) * D2R), Math.cos((FL.heading - FL.camYaw) * D2R)) * R2D * Math.min(1, dt * 3);
   let opts;
   try {
     if (FL.camMode === 2 && FL.crashT <= 0) {           // cockpit
       const f = new T.Vector3(0, 1, 0).applyQuaternion(FL.q), u = new T.Vector3(0, 0, 1).applyQuaternion(FL.q);
       const eye = new T.Vector3().addScaledVector(f, 6 * BS * JV).addScaledVector(u, 1.6 * BS * JV), look = eye.clone().addScaledVector(f, 2000 * BS);
-      opts = map.calculateCameraOptionsFromTo(at(eye.x, eye.y), FL.alt + eye.z, at(look.x, look.y), FL.alt + look.z);
+      opts = map.calculateCameraOptionsFromTo(at(eye.x, eye.y), FL.da + eye.z, at(look.x, look.y), FL.da + look.z);
       opts.roll = FL.bank * R2D;
+      FL.view = { F: [f.x, f.y, f.z], roll: FL.bank };
     } else {
       const far = FL.camMode === 1, speedPull = 1 + 0.5 * Math.log2(1 + FL.v / (JET.vmax * M));
-      const D = (far ? 220 : 50) * BS * JV * speedPull, el = (far ? 22 : 11) * D2R, yaw = FL.camYaw * D2R;
+      // the camera tilts with the jet's climb, so pulling up looks up into the sky (and at Saturn's rings)
+      const D = (far ? 220 : 50) * BS * JV * speedPull, el = ((far ? 22 : 11) * D2R - 0.85 * (FL.climb || 0)), yaw = FL.camYaw * D2R;
       const e = -Math.sin(yaw) * D * Math.cos(el), n = -Math.cos(yaw) * D * Math.cos(el);
       const camLL = at(e, n), camG = qElev([wrapLon(camLL[0]), camLL[1]]);
-      let camAlt = FL.alt + D * Math.sin(el);
+      let camAlt = FL.da + D * Math.sin(el);
       if (camG != null) camAlt = Math.max(camAlt, camG + 12 * BS * JV);
-      opts = map.calculateCameraOptionsFromTo(camLL, camAlt, [pos.lng, pos.lat], FL.alt);
+      opts = map.calculateCameraOptionsFromTo(camLL, camAlt, [pos.lng, pos.lat], FL.da);
       if (opts.zoom > MAXSIMZOOM) {                     // too close for MapLibre: back off along the same line
         const f = 2 ** (opts.zoom - MAXSIMZOOM), e2 = e * f, n2 = n * f;
-        opts = map.calculateCameraOptionsFromTo(at(e2, n2), FL.alt + (camAlt - FL.alt) * f, [pos.lng, pos.lat], FL.alt);
+        opts = map.calculateCameraOptionsFromTo(at(e2, n2), FL.da + (camAlt - FL.da) * f, [pos.lng, pos.lat], FL.da);
       }
       opts.roll = (FL.bank || 0) * R2D * 0.2;
+      { const l = Math.hypot(e, n, D * Math.sin(el)); FL.view = { F: [-e / l, -n / l, -D * Math.sin(el) / l], roll: (FL.bank || 0) * 0.2 }; }
     }
     opts.pitch = Math.min(170, Math.max(0, opts.pitch));
     opts.zoom = Math.min(MAXSIMZOOM, opts.zoom);
     map.jumpTo(opts);
+    if (FL.view) Object.assign(FL.view, { lng: pos.lng, lat: pos.lat, alt: FL.alt / BS, agl: (FL.alt - (FL.g || 0)) / BS });
+    // once space fully covers the view, stop MapLibre loading ground tiles for a camera thousands of km up
+    setGroundHidden(FL.view && FL.view.agl / R_EQ_M > (FL.groundHidden ? 0.04 : 0.045));
   } catch (e) { FL.camErr = (FL.camErr || 0) + 1; }
   map.triggerRepaint();
   if (t - (FL.hudT || 0) > 100) {
     FL.hudT = t;
-    const kmh = FL.v * 3.6;
+    const kmh = FL.v * (FL.af || 1) * 3.6;
     document.getElementById('jSpeed').innerHTML = Math.round(kmh).toLocaleString('en') + ' <small>km/h</small>';
     const agl = (FL.alt - (FL.g || 0)) / BS;
-    document.getElementById('jAlt').textContent = agl < 10000 ? Math.round(agl).toLocaleString('en') + ' m' : (agl / 1000).toFixed(1) + ' km';
+    document.getElementById('jAlt').textContent = agl < 10000 ? Math.round(agl).toLocaleString('en') + ' m' : agl < 1e6 ? (agl / 1000).toFixed(1) + ' km' : Math.round(agl / 1000).toLocaleString('en') + ' km';
     document.getElementById('jHdg').textContent = String(Math.round(((FL.heading % 360) + 360) % 360)).padStart(3, '0') + '°';
     document.getElementById('jThr').style.width = (k.boost ? 100 : FL.thr * 100) + '%';
     document.getElementById('jThrBox').classList.toggle('ab', !!k.boost);
@@ -2412,7 +2556,7 @@ async function startFly() {
   HANDLERS.forEach(hn => map[hn].disable());
   FL.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
   FL.offMarkers.forEach(m => m.remove());
-  if (!jetLayer) { jetLayer = makeJetLayer(); map.addLayer(jetLayer); }
+  if (!jetLayer) { jetLayer = makeJetLayer(); map.addLayer(spaceLayer); map.addLayer(jetLayer); }
   // take off from where you are looking, or over a landmark of each world when zoomed out
   const TAKEOFF = MOON ? [-2.5, 19.5, 20, 'the Montes Apenninus'] : EUROPA ? [86.3, 9.7, 90, 'Conamara Chaos']
     : JUPITER ? [-62, -22, 90, 'the Great Red Spot'] : SATURN ? [-60, 33, 90, 'the band of the 2010–11 great storm'] : [-70, -8, 90, 'Valles Marineris'];
@@ -2432,6 +2576,7 @@ async function startFly() {
 function stopFly() {
   if (!FL.on) return;
   FL.on = false; cancelAnimationFrame(FL.raf); FL.keys = {};
+  setGroundHidden(false); FL.view = null;
   document.body.classList.remove('flying');
   document.getElementById('pullup').classList.remove('on');
   HANDLERS.forEach(hn => map[hn].enable());
