@@ -39,6 +39,13 @@ countries and settings. Moon imagery comes from NASA Moon Trek (LRO WAC, LOLA re
 3D heights are the tiles in `moon-dem/`, made with `tools/build_moon_dem.py` from NASA's LRO LOLA 64 px/degree
 DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
 
+**Drive the moon buggy:** on the Moon, the *Drive the moon buggy* button puts an Apollo Lunar Roving Vehicle on the
+3D terrain (a three.js model in a MapLibre custom layer, loaded only when you start driving). Arrow keys or WASD
+to drive, Shift to boost, Space to hop, C to change camera, Esc to stop. It drives in Moon gravity (1.62 m/s²),
+kicks up dust on airless parabolas and leaves tyre tracks. *Size* draws it 1×, 10× or 40× real size, with speed and
+gravity scaled to match. The ground is the LOLA DEM (~470 m per pixel), so the terrain is gently rolling: small craters
+are in the photo but not in the heights.
+
 ## Europa
 
 `?body=europa` (or the Europa button). Jupiter's moon has no public tile server, so `europa-tiles/` holds our own
