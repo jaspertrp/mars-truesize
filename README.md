@@ -45,3 +45,15 @@ DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
 tiles, cut with `tools/build_europa_tiles.py` from the USGS *Europa Voyager–Galileo SSI Global Mosaic 500 m*
 (public domain; NASA/JPL/USGS). Detail varies a lot across the moon. There is no global height map of Europa,
 so it has no 3D terrain; instead of landing sites it has a list of features to fly to.
+
+## Jupiter (flattened globe)
+
+`?body=jupiter`. The map is Cassini's colour map from 11–12 Dec 2000 (PIA07782, NASA/JPL/Space Science
+Institute), resampled and cut into `jupiter-tiles/` by `tools/build_jupiter_tiles.py`.
+
+Jupiter is visibly flattened (polar radius 66,854 km, equatorial 71,492 km), so the site draws it as an
+ellipsoid: `installEllipsoid()` squashes MapLibre's globe matrix along the polar axis and recomputes the
+camera, horizon plane and frustum to match, so drawing, clicking, dragging and markers stay consistent.
+Map latitudes on Jupiter are the ellipsoid's reduced latitude; labels and the coordinate read-out use
+planetographic latitude. Countries are placed with true geodesics on the ellipsoid (GeographicLib), and
+the measure tool measures along them. "Earth (whole planet, as a disc)" can be added there for scale.
