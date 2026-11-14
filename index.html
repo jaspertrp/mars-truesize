@@ -177,7 +177,8 @@ const BASEMAPS = {
   themis: { label: 'Infrared (THEMIS)', ts: 256, max: 9, out: 'image/webp',
     url: (z, r, c) => `${TREK}THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018/1.0.0/default/default028mm/${z}/${r}/${c}.png`,
     credit: 'THEMIS day IR controlled mosaic, 100 m (±65°): NASA/JPL/ASU/USGS' },
-  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555',
+  // The CTX mosaic is a preliminary one with gaps between image strips, so THEMIS is drawn underneath it.
+  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555', under: 'themis',
     url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
     credit: 'Global CTX mosaic: NASA/JPL/MSSS/Caltech Murray Lab/Esri' },
   classic: { label: 'Classic (8k texture)', local: true,
@@ -196,10 +197,12 @@ function getSrc(bm, z, r, c) {
   const key = bm + '/' + z + '/' + r + '/' + c;
   let p = srcCache.get(key);
   if (p) { srcCache.delete(key); srcCache.set(key, p); return p; }
-  p = fetch(LAYERDEF(bm).url(z, r, c), { mode: 'cors' })
-    .then(res => res.ok ? res.blob() : null)
-    .then(b => b ? createImageBitmap(b) : null)
-    .catch(() => null);
+  // a missing tile (404) is real 'no data'; any other failure is retried once and not remembered,
+  // so a hiccup on the tile server doesn't leave a permanent hole
+  const once = () => fetch(LAYERDEF(bm).url(z, r, c), { mode: 'cors' })
+    .then(res => res.ok ? res.blob().then(b => createImageBitmap(b)) : res.status === 404 ? null : Promise.reject(res.status));
+  p = once().catch(() => new Promise(ok => setTimeout(ok, 600)).then(once))
+    .catch(() => { if (srcCache.get(key) === p) srcCache.delete(key); return null; });
   srcCache.set(key, p);
   if (srcCache.size > 300) srcCache.delete(srcCache.keys().next().value);
   return p;
@@ -368,7 +371,7 @@ for (const [k, B] of Object.entries(BASEMAPS)) {
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
     : { type: 'raster', tiles: [`eq://${k}/{z}/{x}/{y}`], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
   baseLayers.push({ id: 'base-' + k, type: 'raster', source: 'base-' + k,
-    layout: { visibility: k === wantedBase ? 'visible' : 'none' },
+    layout: { visibility: k === wantedBase || k === BASEMAPS[wantedBase].under ? 'visible' : 'none' },
     paint: { 'raster-fade-duration': 200, 'raster-resampling': 'linear' } });
 }
 
@@ -810,7 +813,7 @@ function setBase(k, auto) {
   if (!BASEMAPS[k]) k = DEFAULT_BASE;
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
-  for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k ? 'visible' : 'none');
+  for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k || kk === BASEMAPS[k].under ? 'visible' : 'none');
   updateCredit();
   save();
 }
@@ -837,7 +840,8 @@ function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('o
 tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
   const extra = showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
-  document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + extra;
+  const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
+  document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + under + extra;
 }
 map.on('zoomend', updateCredit);
 const siteSel = document.getElementById('site');
