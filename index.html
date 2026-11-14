@@ -1577,7 +1577,7 @@ try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includ
 let THREE = null, buggyLayer = null, buggyPrev = null;
 const driveBtn = document.getElementById('driveBtn'), hudEl = document.getElementById('hud');
 const DRIVE_LABEL = MOON ? '&#128665; Drive the moon buggy' : '&#128665; Drive a buggy on Mars';
-if (HAS_TERRAIN) { driveBtn.style.display = 'block'; driveBtn.innerHTML = DRIVE_LABEL; }
+driveBtn.innerHTML = DRIVE_LABEL;   // hidden: type "drive" in the search box to start (see the cheat words below)
 const wrap180 = a => ((a + 540) % 360) - 180;
 
 function buildBuggy() {
@@ -1909,7 +1909,17 @@ const FL = { on: false, M: 1, keys: {}, camMode: 0, invert: false };
 try { const m = +localStorage.getItem('jet-speed'); if ([1, 5, 25].includes(m)) FL.M = m; FL.invert = localStorage.getItem('jet-invert') === '1'; } catch (e) {}
 let jetLayer = null, jetPrev = null;
 const flyBtn = document.getElementById('flyBtn'), FLY_LABEL = '&#9992;&#65039; Fly a fighter jet';
-if (HAS_TERRAIN) flyBtn.style.display = 'block';
+// hidden: type "fly" in the search box to start
+// ---------- cheat words ----------
+// The vehicles have no buttons, to keep the map clean: typing "drive" or "fly" in the
+// "Add a country…" box starts them (on worlds with 3D terrain).
+q.addEventListener('input', () => {
+  const w = q.value.trim().toLowerCase(), go = w === 'drive' ? startDrive : w === 'fly' ? startFly : null;
+  if (!go) return;
+  q.value = ''; sugg.style.display = 'none'; q.blur();
+  if (!HAS_TERRAIN) { showToast('There is no ground to ' + w + ' on here'); return; }
+  go();
+});
 
 function buildJet() {
   const T = THREE, g = new T.Group();
