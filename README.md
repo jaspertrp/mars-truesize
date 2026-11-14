@@ -17,7 +17,7 @@ Each country is redrawn at its true dimensions in kilometres. Mars has about hal
 | HiRISE overlay (fades in from zoom 11 where images exist, mostly landing sites) | ~25 cm | NASA/JPL/University of Arizona/USGS/Esri |
 | Classic (8k texture, bundled in `tiles/`) | ~2.6 km | [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0 |
 
-CTX, THEMIS and HiRISE are black-and-white cameras. With **Colour** on (next to the basemap menu; on by default), their tiles take their colour from the same spot in the Viking colour mosaic and keep their own detail as brightness (a ratio pan-sharpen, with the tile's brightness matched to Viking); where Viking can't be reached, a Mars colour ramp is used. Turn it off to see the original greys.
+CTX, THEMIS and HiRISE are black-and-white cameras. They show in their original grey; type **red** in the *Add a country…* box and their tiles take their colour from the same spot in the Viking colour mosaic and keep their own detail as brightness (a ratio pan-sharpen, with the tile's brightness matched to Viking); where Viking can't be reached, a Mars colour ramp is used. Type **grey** to switch back.
 
 The first four are streamed from [NASA Mars Trek](https://trek.nasa.gov/mars/) and Esri's OnMars service. Both serve tiles in a geographic (equirectangular) grid, and the page reprojects them to Web Mercator in the browser through a custom MapLibre protocol (`eq://`). If a tile server can't be reached, the map falls back to the bundled Classic tiles.
 
