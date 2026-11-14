@@ -124,7 +124,7 @@
   </div>
   <div class="terr">
     <label class="tog"><input type="checkbox" id="tTerrain"> 3D terrain</label>
-    <label class="exag" id="exagWrap" title="Vertical exaggeration. 1× = true proportions">Height <input type="range" id="exag" min="1" max="10" step="0.5" value="3"><span id="exagVal">3×</span></label>
+    <label class="exag" id="exagWrap" title="Vertical exaggeration. 1× = true proportions">Height <input type="range" id="exag" min="1" max="10" step="0.5" value="1"><span id="exagVal">1×</span></label>
   </div>
   <div class="search">
     <input id="q" type="text" placeholder="Add a country, province or continent…" autocomplete="off" spellcheck="false">
@@ -803,7 +803,7 @@ siteSel.onchange = () => {
 // ---------- 3D terrain ----------
 // MapLibre draws an Earth-sized planet; our Mars imagery is stretched onto it, so 1 Mars metre = MARS_SCALE map metres.
 const MARS_SCALE = 6378137 / (R_MARS * 1000);
-let terrainOn = true, exag = 3;   // 3D terrain on by default
+let terrainOn = true, exag = 1;   // 3D terrain on by default, at true proportions
 const exagEl = document.getElementById('exag'), exagWrap = document.getElementById('exagWrap'), tTerrain = document.getElementById('tTerrain');
 function applyTerrain(animate) {
   tTerrain.checked = terrainOn;
@@ -826,10 +826,10 @@ exagEl.onchange = () => save();
 let restoring = false;                  // don't overwrite the saved list while it is being restored
 function save() {
   if (restoring) return;
-  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 3, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
+  try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 4, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
     hirise: typeof showHirise === 'undefined' ? true : showHirise,
-    terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 3 : exag })); } catch (e) {}
+    terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
 
 map.on('load', () => {
@@ -840,7 +840,7 @@ map.on('load', () => {
   }
   updateScale();
   if (saved) {
-    terrainOn = saved.v >= 3 ? !!saved.terrain : true; exag = saved.exag || 3; exagEl.value = exag;
+    terrainOn = saved.v >= 3 ? !!saved.terrain : true; exag = saved.v >= 4 ? (saved.exag || 1) : 1; exagEl.value = exag;
   }
   applyTerrain(false); applyHirise();
   if (saved && Array.isArray(saved.items)) {
