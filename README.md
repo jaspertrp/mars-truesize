@@ -38,3 +38,10 @@ Switch between Mars and the Moon at the top of the panel (or open `?body=moon`).
 countries and settings. Moon imagery comes from NASA Moon Trek (LRO WAC, LOLA relief, Kaguya TC). The Moon's
 3D heights are the tiles in `moon-dem/`, made with `tools/build_moon_dem.py` from NASA's LRO LOLA 64 px/degree
 DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
+
+## Europa
+
+`?body=europa` (or the Europa button). Jupiter's moon has no public tile server, so `europa-tiles/` holds our own
+tiles, cut with `tools/build_europa_tiles.py` from the USGS *Europa Voyager–Galileo SSI Global Mosaic 500 m*
+(public domain; NASA/JPL/USGS). Detail varies a lot across the moon. There is no global height map of Europa,
+so it has no 3D terrain; instead of landing sites it has a list of features to fly to.

@@ -104,7 +104,7 @@
   .maplibregl-ctrl button .maplibregl-ctrl-icon{filter:invert(1)}
   .head{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .bodysw{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex:none}
-  .bodysw button{background:none;border:0;color:var(--muted);font:600 11.5px/1 'Space Grotesk',system-ui,sans-serif;padding:5px 10px;cursor:pointer}
+  .bodysw button{background:none;border:0;color:var(--muted);font:600 11.5px/1 'Space Grotesk',system-ui,sans-serif;padding:5px 8px;cursor:pointer}
   .bodysw button.on{background:var(--accent);color:#1a0f0b}
   .bodysw button:not(.on):hover{color:var(--text)}
   .viewctrl button{color:#f6e9e1;font:600 13px/1 'Space Grotesk',system-ui,sans-serif}
@@ -126,7 +126,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>True Size of <span id="bodyName">Mars</span></h1>
-    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button></div>
+    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button></div>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -168,12 +168,15 @@ const TOPO = {"type":"Topology","objects":{"countries":{"type":"GeometryCollecti
 // ?body=moon / ?body=mars picks one; otherwise the last one this browser used (Mars for new visitors).
 const BODY = (() => {
   const q = new URLSearchParams(location.search).get('body');
-  if (q === 'moon' || q === 'mars') return q;
-  try { return localStorage.getItem('truesize-body') === 'moon' ? 'moon' : 'mars'; } catch (e) { return 'mars'; }
+  const ok = b => b === 'mars' || b === 'moon' || b === 'europa';
+  if (ok(q)) return q;
+  try { const b = localStorage.getItem('truesize-body'); return ok(b) ? b : 'mars'; } catch (e) { return 'mars'; }
 })();
 try { localStorage.setItem('truesize-body', BODY); } catch (e) {}
-const MOON = BODY === 'moon';
-const BODY_NAME = MOON ? 'the Moon' : 'Mars', BODY_THE = BODY_NAME, BODY_SHORT = MOON ? 'Moon' : 'Mars';
+const MOON = BODY === 'moon', EUROPA = BODY === 'europa', MARS = BODY === 'mars';
+const BODY_SHORT = MOON ? 'Moon' : EUROPA ? 'Europa' : 'Mars';
+const BODY_NAME = MOON ? 'the Moon' : BODY_SHORT, BODY_THE = BODY_NAME;
+const HAS_TERRAIN = !EUROPA;        // there is no global height map of Europa
 document.title = 'True Size of ' + BODY_NAME;
 document.getElementById('bodyName').textContent = BODY_SHORT;
 if (MOON) document.getElementById('bodyName').before('the ');
@@ -182,13 +185,14 @@ document.querySelectorAll('#bodysw button').forEach(b => {
   b.onclick = () => { if (b.dataset.b === BODY) return; try { save(); } catch (e) {} location.href = location.pathname + '?body=' + b.dataset.b; };
 });
 if (MOON) { const tl = document.getElementById('trekLink'); tl.href = 'https://trek.nasa.gov/moon/'; tl.textContent = 'NASA Moon Trek'; }
+if (EUROPA) { const tl = document.getElementById('trekLink'); tl.href = 'https://astrogeology.usgs.gov/search/map/europa_voyager_galileo_ssi_global_mosaic_500m'; tl.textContent = 'USGS Astrogeology'; tl.previousSibling.textContent = ' · map via '; }
 
-const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : 3389.5;
+const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : 3389.5;
 const K = R_EARTH / R_BODY;
 const BODY_AREA = 4 * Math.PI * R_BODY * R_BODY;
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const PALETTE = ['#4cc9f0','#b8f24c','#f72585','#ffd166','#7b6cff','#2ee6a8','#ff9f1c','#e0e0ff','#ff5d73','#00b4d8'];
-const KEY = MOON ? 'moon-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
+const KEY = MOON ? 'moon-truesize-v1' : EUROPA ? 'europa-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
 
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
@@ -211,7 +215,14 @@ const MOON_BASEMAPS = {
     url: (z, r, c) => `${MTREK}Kaguya_TCortho_Mosaic_Global_4096ppd/1.0.0/default/default028mm/${z}/${r}/${c}.png`,
     credit: 'Kaguya (SELENE) Terrain Camera mosaic: JAXA' }
 };
-const BASEMAPS = MOON ? MOON_BASEMAPS : {
+// Europa: no tile server has it, so these are our own tiles (europa-tiles/), cut from the USGS global mosaic
+// with tools/build_europa_tiles.py. Detail varies a lot: sharp Galileo strips, blurry Voyager elsewhere.
+const EUROPA_BASEMAPS = {
+  usgs: { label: 'Voyager + Galileo (500 m)', ts: 256, max: 5, out: 'image/jpeg', bg: '#999',
+    url: (z, r, c) => new URL(`europa-tiles/${z}/${r}/${c}.jpg`, location.href).href,
+    credit: 'Europa Voyager–Galileo SSI global mosaic 500 m: NASA/JPL/USGS' }
+};
+const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : {
   viking: { label: 'Colour (Viking)', ts: 256, max: 7, out: 'image/jpeg', bg: '#6b3b26',
     url: (z, r, c) => `${TREK}Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/${z}/${r}/${c}.jpg`,
     credit: 'Viking MDIM 2.1 colour mosaic, 232 m: NASA/JPL/USGS' },
@@ -313,7 +324,7 @@ maplibregl.addProtocol('eq', async params => {
   const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
   return { data: await blob.arrayBuffer() };
 });
-const DEFAULT_BASE = MOON ? 'wac' : 'relief';
+const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : 'relief';
 // the visitor's chosen basemap, read up front so an early fallback can never overwrite it
 let wantedBase = (saved && saved.v >= 3 && BASEMAPS[saved.base] && saved.base) || DEFAULT_BASE;
 let baseKey = wantedBase, fellBack = false;
@@ -439,11 +450,11 @@ const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
   center: [-62, 0], zoom: startProj === 'globe' ? 1.6 : 2,
-  minZoom: 0.5, maxZoom: 18, renderWorldCopies: true, maxPitch: 80,
+  minZoom: 0.5, maxZoom: EUROPA ? 9 : 18, renderWorldCopies: true, maxPitch: 80,
   style: {
     version: 8,
     projection: { type: startProj },
-    sky: { 'atmosphere-blend': MOON ? 0 : ['interpolate', ['linear'], ['zoom'], 0, 0.85, 4, 0.6, 7, 0] },   // the Moon has no air
+    sky: { 'atmosphere-blend': !MARS ? 0 : ['interpolate', ['linear'], ['zoom'], 0, 0.85, 4, 0.6, 7, 0] },   // the Moon has no air
     sources: {
       ...baseSources,
       countries: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
@@ -517,7 +528,11 @@ function updateScale() {
 map.on('move', updateScale);
 
 // landmarks
-const FEATURES = MOON ? [
+const FEATURES = EUROPA ? [
+  ['Pwyll', -25.2, 88.6], ['Conamara Chaos', 9.7, 86.3], ['Murias Chaos', 22, -83], ['Tyre', 34, -146.6],
+  ['Callanish', -16.7, 25.4], ['Thera Macula', -46.7, 178.8], ['Thrace Macula', -46, -171],
+  ['Manannán', 3, 120], ['Cilix', 2.6, 178]
+] : MOON ? [
   ['Oceanus Procellarum', 18.4, -57.4], ['Mare Imbrium', 32.8, -15.6], ['Mare Serenitatis', 28.0, 17.5],
   ['Mare Tranquillitatis', 8.5, 31.4], ['Mare Crisium', 17.0, 59.1], ['Mare Fecunditatis', -7.8, 51.3],
   ['Mare Nectaris', -15.2, 35.5], ['Mare Nubium', -21.3, -16.6], ['Mare Frigoris', 56.0, 1.4],
@@ -533,7 +548,7 @@ const FEATURES = MOON ? [
   ['Amazonis Planitia', 24.8, -163.6], ['Terra Cimmeria', -32.7, 145], ['Noachis Terra', -45, -5],
   ['Planum Boreum', 84, 0], ['Planum Australe', -84, 160], ['Vastitas Borealis', 67, -150]
 ];
-const SITES = MOON ? [
+const SITES = EUROPA ? [] : MOON ? [
   ['Apollo 11', 0.674, 23.473], ['Apollo 12', -3.012, -23.422], ['Apollo 14', -3.645, -17.471],
   ['Apollo 15', 26.132, 3.634], ['Apollo 16', -8.973, 15.501], ['Apollo 17', 20.191, 30.772],
   ['Luna 9', 7.08, -64.37], ['Luna 17 · Lunokhod 1', 38.24, -35.0], ['Surveyor 1', -2.47, -43.34],
@@ -924,23 +939,29 @@ map.on('move', cullLabels); map.on('load', cullLabels);
 // ---------- HiRISE overlay + landing sites ----------
 let showHirise = !(saved && saved.hirise === false);
 const tHirise = document.getElementById('tHirise');
-if (MOON) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
+if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
 function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
 tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
-  const extra = !MOON && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
+  const extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
   document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + under + extra;
 }
 map.on('zoomend', updateCredit);
 const siteSel = document.getElementById('site');
-SITES.forEach(([n], i) => siteSel.add(new Option(n, i)));
+// worlds without landers (Europa) get a list of features to fly to instead
+const FLY = SITES.length ? SITES : FEATURES;
+if (!SITES.length) {
+  siteSel.options[0].text = 'Fly to a feature…';
+  document.getElementById('tSites').closest('label').style.display = 'none';
+}
+FLY.forEach(([n], i) => siteSel.add(new Option(n, i)));
 siteSel.onchange = () => {
-  const s = SITES[+siteSel.value]; siteSel.value = ''; if (!s) return;
-  if (!MOON && !showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
+  const s = FLY[+siteSel.value]; siteSel.value = ''; if (!s) return;
+  if (MARS && !showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
   // a gentle arc: out a little, across, then down to a zoom where HiRISE and the terrain still look good
-  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
+  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : EUROPA ? 5 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
     easing: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, essential: true });
 };
 
@@ -949,7 +970,9 @@ siteSel.onchange = () => {
 const BODY_SCALE = 6378137 / (R_BODY * 1000);
 let terrainOn = true, exag = 1;   // 3D terrain on by default, at true proportions
 const exagEl = document.getElementById('exag'), exagWrap = document.getElementById('exagWrap'), tTerrain = document.getElementById('tTerrain');
+if (!HAS_TERRAIN) { terrainOn = false; tTerrain.closest('.terr').style.display = 'none'; }
 function applyTerrain(animate) {
+  if (!HAS_TERRAIN) terrainOn = false;
   tTerrain.checked = terrainOn;
   exagWrap.classList.toggle('on', terrainOn);
   document.getElementById('exagVal').textContent = exag + '×';
