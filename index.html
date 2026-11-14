@@ -2345,7 +2345,6 @@ function setGroundHidden(hide) {
     else if (FL.hiddenVis && FL.hiddenVis[l.id]) map.setLayoutProperty(l.id, 'visibility', FL.hiddenVis[l.id]);
   }
   if (!hide) FL.hiddenVis = null;
-  if (HAS_TERRAIN) map.setTerrain(hide ? null : { source: 'dem', exaggeration: BODY_SCALE * exag });
 }
 function makeJetLayer() {
   const T = THREE, scene = new T.Scene(), cam = new T.Camera();
