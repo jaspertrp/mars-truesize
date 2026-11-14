@@ -2249,6 +2249,7 @@ const spaceLayer = {
       precision highp float;
       varying vec2 v_ndc;
       uniform vec3 u_o, u_F, u_R, u_U;     // camera position and axes, in equatorial radii (y = spin axis)
+      uniform vec3 u_up;                   // local vertical at the jet
       uniform float u_tx, u_ty, u_q, u_w, u_rings, u_rin, u_rout, u_hasPlanet;
       uniform sampler2D u_planet, u_ring;
       void main() {
@@ -2274,6 +2275,8 @@ const spaceLayer = {
             if (r > u_rin && r < u_rout) {
               vec4 rt = texture2D(u_ring, vec2((r - u_rin) / (u_rout - u_rin), 0.5));
               float al = 1.0 - exp(-rt.a * 6.0 / max(abs(d.y), 0.02));
+              // below eye level the flat map shows ground (it has no horizon dip), so the rings must not show through it
+              if (dot(d, u_up) < 0.0) al *= u_w;
               col = vec4(rt.rgb * al, al) + col * (1.0 - al);
             }
           }
@@ -2296,7 +2299,7 @@ const spaceLayer = {
     }
     const U = nm => gl.getUniformLocation(prog, nm);
     this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), F: U('u_F'), R: U('u_R'), U: U('u_U'), tx: U('u_tx'), ty: U('u_ty'),
-      q: U('u_q'), w: U('u_w'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
+      q: U('u_q'), w: U('u_w'), up: U('u_up'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
   },
   render(gl) {
     const V = FL.on && FL.view;
@@ -2322,7 +2325,7 @@ const spaceLayer = {
     const fov = (map.transform.fov || 36.87) * D2R, cvs = map.getCanvas(), ty = Math.tan(fov / 2), tx = ty * cvs.width / cvs.height;
     const L = this.loc, pt = w > 0 ? spaceTexture(gl, baseKey) : null;
     gl.useProgram(this.prog);
-    gl.uniform3f(L.o, ...o); gl.uniform3f(L.F, ...F); gl.uniform3f(L.R, ...R); gl.uniform3f(L.U, ...Up);
+    gl.uniform3f(L.o, ...o); gl.uniform3f(L.F, ...F); gl.uniform3f(L.R, ...R); gl.uniform3f(L.U, ...Up); gl.uniform3f(L.up, ...nrm);
     gl.uniform1f(L.tx, tx); gl.uniform1f(L.ty, ty); gl.uniform1f(L.q, Q); gl.uniform1f(L.w, w);
     gl.uniform1f(L.rings, rings ? 1 : 0); gl.uniform1f(L.rin, SATURN ? RING_IN : 0); gl.uniform1f(L.rout, SATURN ? RING_OUT : 0);
     gl.uniform1f(L.has, pt && pt.ready ? 1 : 0);
