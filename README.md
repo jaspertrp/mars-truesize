@@ -79,9 +79,12 @@ the measure tool measures along them. "Earth (whole planet, as a disc)" can be a
 ## Saturn (flattened globe with rings)
 
 `?body=saturn`. Planet map: Cassini ISS colour global map of 11 Aug 2011 (NASA PDS Atmospheres Node, *Cassini ISS
-Global Maps of Jupiter and Saturn*, Li et al., doi:10.17189/rkkb-6y30). The strips hidden by the rings' shadow and the
-poles are filled in from neighbouring latitudes. Tiles in `saturn-tiles/`, made with `tools/build_gasgiant_tiles.py
---saturn --pia` (planetocentric source). Saturn is flattened even more than Jupiter (polar 54,364 km, equatorial
+Global Maps of Jupiter and Saturn*, Li et al., doi:10.17189/rkkb-6y30), contrast-enhanced; the strips hidden by the
+rings' shadow are filled in from neighbouring latitudes. The north polar cap with the hexagon comes from Cassini's
+natural-colour polar-stereographic mosaic of June 2013 (PIA21611, NASA/JPL-Caltech/SSI/Hampton University),
+colour-matched where it meets the global map (`tools/build_saturn_map.py`). Tiles in `saturn-tiles/` (made with
+`tools/build_gasgiant_tiles.py --saturn --pia`). Because MapLibre's tiles stop at 85° latitude, the cap above 84° is
+drawn by a small WebGL layer straight from `saturn-npole.jpg`, so the polar vortex in the hexagon's centre shows. Saturn is flattened even more than Jupiter (polar 54,364 km, equatorial
 60,268 km) and uses the same squashed-globe code.
 
 The rings are a WebGL custom layer in the globe's own coordinates. Their density is a real measurement: the normal

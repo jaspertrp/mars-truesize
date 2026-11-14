@@ -337,12 +337,13 @@ const JUPITER_BASEMAPS = {
     url: (z, r, c) => new URL(`jupiter-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Map: NASA/JPL-Caltech/SSI/SwRI/MSSS/ASI/INAF/JIRAM/Björn Jónsson, CC BY 3.0' }
 };
-// Saturn: Cassini's colour global map of 11 Aug 2011 (NASA PDS Atmospheres node, Li et al.), with the strips hidden by
-// the rings and the poles filled in from neighbouring latitudes, resampled and cut into saturn-tiles/.
+// Saturn: Cassini's colour global map of 11 Aug 2011 (NASA PDS Atmospheres node, Li et al.), contrast-enhanced, with the
+// strips hidden by the rings filled from neighbouring latitudes, and the north polar cap (hexagon) from Cassini's
+// natural-colour polar mosaic of June 2013 (PIA21611). Made by tools/build_saturn_map.py, cut into saturn-tiles/.
 const SATURN_BASEMAPS = {
-  cassini: { label: 'Cassini colour (Aug 2011)', ts: 256, max: 3, out: 'image/jpeg', bg: '#d9c19a',
+  cassini: { label: 'Cassini colour (2011 + hexagon 2013)', ts: 256, max: 5, out: 'image/jpeg', bg: '#d9c19a',
     url: (z, r, c) => new URL(`saturn-tiles/${z}/${r}/${c}.jpg`, location.href).href,
-    credit: 'Cassini ISS colour map, 11 Aug 2011: NASA/JPL-Caltech/SSI, L. Li et al. (PDS) · ring profile: Cassini RSS (PDS Rings)' }
+    credit: 'Cassini ISS colour map, 11 Aug 2011: NASA/JPL-Caltech/SSI, L. Li et al. (PDS) · north pole: PIA21611, June 2013, NASA/JPL-Caltech/SSI/Hampton University · ring profile: Cassini RSS (PDS Rings)' }
 };
 const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : SATURN ? SATURN_BASEMAPS : {
   viking: { label: 'Colour (Viking)', ts: 256, max: 7, out: 'image/jpeg', bg: '#6b3b26',
@@ -387,7 +388,7 @@ function getSrc(bm, z, r, c) {
 const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D;
 // Near the poles the map is drawn by stretching the last row of pixels (above 85°) into a cap, which looks
 // like a pinwheel. Fading the last few degrees into one average polar value turns that into a smooth cap.
-const POLE_FADE0 = 81.5, POLE_FADE1 = 85.05;
+const POLE_FADE0 = GIANT ? 84 : 81.5, POLE_FADE1 = 85.05;   // gas giants: keep the polar detail (Juno's cyclones, Saturn's hexagon)
 const poleWeight = lat => { const t = (Math.abs(lat) - POLE_FADE0) / (POLE_FADE1 - POLE_FADE0); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
 const poleColorCache = {};
 function poleColor(bm) {        // -> Promise<{n:'rgb()', s:'rgb()'}|null>, averaged from the coarsest source level
@@ -783,7 +784,7 @@ map.on('move', updateScale);
 
 // landmarks
 const FEATURES = SATURN ? [
-  ['North polar hexagon', 78, 0], ['South polar vortex', -88, 0],
+  ['North polar hexagon', 82.5, 0], ['South polar vortex', -88, 0],
   ['Great storm of 2010–11 (its band)', 33, -40], ['Equatorial Zone', 0, 60], ['South Equatorial Belt', -20, 60],
   ['North Equatorial Belt', 18, 120]
 ].map(([n, phi, lo]) => [n, toMapLat(phi), lo]) : JUPITER ? [
@@ -1125,11 +1126,89 @@ const ringLayer = {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
   }
 };
+// ---------- Saturn's north pole ----------
+// MapLibre's tiles stop at 85° latitude and fill the rest by stretching, which would wipe out the polar vortex inside
+// the hexagon. This layer draws the cap above 84° straight from Cassini's polar mosaic (PIA21611, June 2013, colour-
+// matched to the map), on the same squashed globe. The back side is hidden with MapLibre's own horizon plane.
+const npoleLayer = {
+  id: 'saturn-npole', type: 'custom', renderingMode: '2d',
+  onAdd(m, gl) {
+    const vs = `
+      attribute vec2 a_pos;          // (longitude, map latitude) in radians
+      uniform mat4 u_matrix;
+      varying vec3 v_p;
+      void main() {
+        vec3 p = vec3(sin(a_pos.x) * cos(a_pos.y), sin(a_pos.y), cos(a_pos.x) * cos(a_pos.y));
+        v_p = p; gl_Position = u_matrix * vec4(p, 1.0); gl_Position.z = 0.0;
+      }`;
+    const fs = `
+      precision highp float;
+      varying vec3 v_p;
+      uniform sampler2D u_tex; uniform vec4 u_plane; uniform float u_q, u_rc;
+      void main() {
+        if (dot(v_p, u_plane.xyz) + u_plane.w < 0.0) discard;
+        vec3 p = normalize(v_p);
+        float beta = asin(clamp(p.y, -1.0, 1.0)), lng = atan(p.x, p.z);
+        float phi = atan(tan(beta) / u_q);                         // planetographic latitude
+        float rho = 2.0 * u_rc * tan((1.5707963 - phi) * 0.5) / 25.0;   // pixels from the pole in the mosaic
+        vec2 uv = vec2(320.0 + rho * sin(lng), 320.0 - rho * cos(lng)) / 640.0;
+        float a = 1.0 - smoothstep(255.0, 300.0, rho);
+        if (a <= 0.0) discard;
+        vec3 c = texture2D(u_tex, uv).rgb;
+        gl_FragColor = vec4(c * a, a);
+      }`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(o)); return o; };
+    const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+    this.prog = prog;
+    const v = [], NA = 180, NB = 24, b0 = toMapLat(83.4) * D2R;   // triangle strips from 83.4° to the pole
+    for (let j = 0; j < NB; j++) {
+      const ba = b0 + (Math.PI / 2 - b0) * j / NB, bb = b0 + (Math.PI / 2 - b0) * (j + 1) / NB;
+      for (let i = 0; i <= NA; i++) { const a = i / NA * Math.PI * 2; v.push(a, ba, a, bb); }
+      v.push(Math.PI * 2, bb, 0, b0 + (Math.PI / 2 - b0) * (j + 1) / NB);   // degenerate joins between strips
+    }
+    this.count = v.length / 2;
+    this.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    this.tex = gl.createTexture(); this.ready = false;
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.ready = true; m.triggerRepaint();
+    };
+    img.src = new URL('saturn-npole.jpg', location.href).href;
+    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), m: gl.getUniformLocation(prog, 'u_matrix'), tex: gl.getUniformLocation(prog, 'u_tex'),
+      plane: gl.getUniformLocation(prog, 'u_plane'), q: gl.getUniformLocation(prog, 'u_q'), rc: gl.getUniformLocation(prog, 'u_rc') };
+  },
+  render(gl, args) {
+    const tr = map.transform, vp = tr && tr._verticalPerspectiveTransform;
+    if (!this.ready || !vp || !(tr._globeness > 0.5) || baseKey !== 'cassini') return;
+    const L = this.loc, pl = vp._cachedClippingPlane;
+    gl.useProgram(this.prog);
+    gl.uniformMatrix4fv(L.m, false, args.defaultProjectionData.mainMatrix);
+    gl.uniform4f(L.plane, pl[0], pl[1], pl[2], pl[3]);
+    gl.uniform1f(L.q, Q); gl.uniform1f(L.rc, J_A * J_A / J_B);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(L.tex, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(L.pos); gl.vertexAttribPointer(L.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
+  }
+};
 if (SATURN) {
-  map.on('load', () => { if (!map.getLayer('saturn-rings')) map.addLayer(ringLayer); });
+  map.on('load', () => {
+    if (!map.getLayer('saturn-npole')) map.addLayer(npoleLayer, 'c-fill');
+    if (!map.getLayer('saturn-rings')) map.addLayer(ringLayer);
+  });
   const rb = document.getElementById('ringBtn'); rb.style.display = 'block';
   // the camera always looks at a point on the planet: from mid-latitudes you look down onto the open rings
-  rb.onclick = () => map.flyTo({ center: [map.getCenter().lng, toMapLat(28)], zoom: innerWidth < 640 ? 0.5 : 0.85, pitch: 0, bearing: 0, duration: 2500, essential: true });
+  rb.onclick = () => {
+    // fit the whole ring system (2.34 Saturn radii) in the free part of the window; MapLibre's globe grows by 1/cos(lat)
+    const free = Math.min(innerWidth - (innerWidth > 640 ? 340 : 0), innerHeight), lat = 28;
+    const z = Math.log2(0.18 * free * 2 * Math.PI / 512) - Math.log2(1 / Math.cos(toMapLat(lat) * D2R));
+    map.flyTo({ center: [map.getCenter().lng, toMapLat(lat)], zoom: Math.max(map.getMinZoom(), z), pitch: 0, bearing: 0, duration: 2500, essential: true });
+  };
 }
 
 // ---------- hover + drag ----------
