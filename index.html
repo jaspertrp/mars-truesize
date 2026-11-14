@@ -140,7 +140,7 @@
   body.driving .panel,body.driving .maplibregl-ctrl-top-right,body.driving .coords,body.driving .measure,body.driving .feat,body.driving .site{display:none!important}
   .hud{display:none;position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--text);font-size:12.5px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:calc(100% - 20px)}
   body.driving .hud{display:block}
-  .hud{width:700px}
+  .hud{width:760px}
   .hud .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center}
   .hud .big{font:700 22px/1 'Space Grotesk',system-ui,sans-serif;min-width:92px;text-align:right}
   .hud .big small{font-size:11px;font-weight:500;color:var(--muted)}
@@ -197,9 +197,10 @@
     <div class="stat">Heading <b id="hHead">N</b></div>
     <div class="stat" id="hPos"></div>
     <div class="sz" id="hSize" title="How big the buggy is drawn (speeds and gravity scale with it)"><button type="button" data-s="1">Real size</button><button type="button" data-s="10">10&times;</button><button type="button" data-s="40">40&times;</button></div>
+    <div class="sz" id="hSpeedSel" title="Top speed (keys 1–4). Shift boosts 3× on top"><button type="button" data-m="1">Speed 1&times;</button><button type="button" data-m="4">4&times;</button><button type="button" data-m="15">15&times;</button><button type="button" data-m="50">50&times;</button></div>
     <button type="button" class="exit" id="hExit">Stop driving</button>
   </div>
-  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
+  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
 </div>
 <div class="pad" id="pad"><span></span><button type="button" data-k="up">&#9650;</button><button type="button" data-k="hop">&#11014;</button><button type="button" data-k="left">&#9664;</button><button type="button" data-k="down">&#9660;</button><button type="button" data-k="right">&#9654;</button></div>
 <div class="coords" id="coords"></div>
@@ -1362,12 +1363,13 @@ document.addEventListener('keydown', e => {
 // BODY_SCALE (and the height slider) to get MapLibre's Earth-sized map metres. "Size" draws the buggy larger;
 // its speeds and gravity scale with it, so it handles the same at every size.
 const LRV = { len: 3.1, track: 1.83, base: 2.29, wheelR: 0.405, wheelW: 0.23, vmax: 13 / 3.6 };   // Apollo LRV: 13 km/h
-const G_MOON = 1.62;
-const BG = { on: false, S: 10, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
-try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includes(s)) BG.S = s; } catch (e) {}
+const G_MOON = MOON ? 1.62 : 3.72;   // surface gravity of the world you drive on (Moon or Mars)
+const BG = { on: false, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
+try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includes(s)) BG.S = s; const m = +localStorage.getItem('buggy-speed'); if ([1, 4, 15, 50].includes(m)) BG.M = m; } catch (e) {}
 let THREE = null, buggyLayer = null, buggyPrev = null;
 const driveBtn = document.getElementById('driveBtn'), hudEl = document.getElementById('hud');
-if (MOON) driveBtn.style.display = 'block';
+const DRIVE_LABEL = MOON ? '&#128665; Drive the moon buggy' : '&#128665; Drive a buggy on Mars';
+if (HAS_TERRAIN) { driveBtn.style.display = 'block'; driveBtn.innerHTML = DRIVE_LABEL; }
 const wrap180 = a => ((a + 540) % 360) - 180;
 
 function buildBuggy() {
@@ -1421,7 +1423,7 @@ function makeBuggyLayer() {
   // dust: no air on the Moon, so every grain flies on a clean parabola and drops straight back down
   const dust = [], dgeo = new T.IcosahedronGeometry(1, 0);
   for (let i = 0; i < 90; i++) {
-    const m = new T.Mesh(dgeo, new T.MeshBasicMaterial({ color: 0xbdb6ad, transparent: true, opacity: 0, depthWrite: false }));
+    const m = new T.Mesh(dgeo, new T.MeshBasicMaterial({ color: MOON ? 0xbdb6ad : 0xc08a5e, transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; scene.add(m); dust.push({ m, v: new T.Vector3(), life: 0, max: 1 });
   }
   BG.bug = bug; BG.dust = dust; BG.scene = scene;
@@ -1463,21 +1465,30 @@ function setBuggySize(S) {
   try { localStorage.setItem('moon-buggy-size', S); } catch (e) {}
 }
 document.querySelectorAll('#hSize button').forEach(b => b.onclick = () => { setBuggySize(+b.dataset.s); b.blur(); });
+function setBuggySpeed(M) {
+  BG.M = M;
+  document.querySelectorAll('#hSpeedSel button').forEach(b => b.classList.toggle('on', +b.dataset.m === M));
+  try { localStorage.setItem('buggy-speed', M); } catch (e) {}
+}
+document.querySelectorAll('#hSpeedSel button').forEach(b => b.onclick = () => { setBuggySpeed(+b.dataset.m); b.blur(); });
 
 // tyre tracks: one line with a gap, so it draws as two wheel tracks; broken wherever the buggy was in the air
-function styleTrail() {
-  if (!map.getLayer('trail') || BG.my == null) return;
-  const lat = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0).toLngLat().lat;
-  const px0 = 512 / (40075016.686 * Math.cos(lat * D2R)) * BODY_SCALE * BG.S;   // pixels per Moon metre at zoom 0
-  const w = px0 * LRV.wheelW, gap = px0 * (LRV.track - LRV.wheelW);
-  map.setPaintProperty('trail', 'line-width', ['interpolate', ['exponential', 2], ['zoom'], 0, w, 24, w * 2 ** 24]);
-  map.setPaintProperty('trail', 'line-gap-width', ['interpolate', ['exponential', 2], ['zoom'], 0, gap, 24, gap * 2 ** 24]);
+// Tyre tracks are drawn as real-size strips on the ground (polygons), so they stay put and keep their width at
+// every zoom. Each sample stores the four strip edges across the buggy; consecutive samples make one quad per
+// wheel. Finished chunks go to 'trail' and are rarely redrawn; only the current chunk is updated while driving.
+function styleTrail() {}
+const quads = (a, b) => [[[a[0], a[1], b[1], b[0], a[0]]], [[a[2], a[3], b[3], b[2], a[2]]]];
+function chunkFeature(seg) {
+  const polys = [];
+  for (let i = 1; i < seg.length; i++) polys.push(...quads(seg[i - 1], seg[i]));
+  return { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polys } };
 }
-function drawTrail() {
+function drawTrail(all) {
   const segs = BG.trail.filter(s => s.length > 1);
-  map.getSource('trail').setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: segs } });
+  if (all !== false) map.getSource('trail').setData({ type: 'FeatureCollection', features: segs.slice(0, -1).map(chunkFeature) });
+  const live = BG.trail[BG.trail.length - 1];
+  map.getSource('trail-live').setData({ type: 'FeatureCollection', features: live.length > 1 ? [chunkFeature(live)] : [] });
 }
-
 const HEADINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 function updateHud(ll) {
   const kmh = Math.abs(BG.v) * 3.6;
@@ -1492,19 +1503,19 @@ function driveStep(t) {
   if (!BG.on) return;
   BG.raf = requestAnimationFrame(driveStep);
   const dt = Math.min(0.05, (t - (BG.t || t)) / 1000) || 0.016; BG.t = t;
-  const k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1;
-  const vmax = LRV.vmax * S * boost, acc = LRV.vmax * S * 0.6 * (k.boost ? 2.2 : 1), brake = LRV.vmax * S * 1.6;
+  const k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1, vb = LRV.vmax * S * BG.M;   // vb: top speed without boost
+  const vmax = vb * boost, acc = vb * 0.6 * (k.boost ? 2.2 : 1), brake = vb * 1.6;
   const thr = (k.up ? 1 : 0) - (k.down ? 1 : 0), steerIn = (k.right ? 1 : 0) - (k.left ? 1 : 0);
   const mc0 = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), mu = mc0.meterInMercatorCoordinateUnits();
   // --- driving (only with wheels on the ground) ---
   if (!BG.air) {
     if (thr > 0) BG.v += (BG.v < 0 ? brake : acc) * dt;
     else if (thr < 0) BG.v -= (BG.v > 0 ? brake : acc * 0.6) * dt;
-    else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), LRV.vmax * S * 0.35 * dt);
+    else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), vb * 0.35 * dt);
     BG.v -= G_MOON * S * Math.sin(BG.pitch) * dt;                       // uphill slows you down
     if (BG.v > vmax) BG.v -= (BG.v - vmax) * Math.min(1, 1.5 * dt);
     if (BG.v < -vmax * 0.4) BG.v -= (BG.v + vmax * 0.4) * Math.min(1, 1.5 * dt);
-    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (LRV.vmax * S * 2));
+    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (LRV.vmax * S * 2));   // steer less the faster you go
     BG.steer += (steerIn * maxSteer - BG.steer) * Math.min(1, dt * 6);
     BG.heading += (BG.v / S) / LRV.base * Math.tan(BG.steer) * R2D * dt;
     if (k.hop && !BG.air) { BG.vz = (BG.vz > 0 ? BG.vz : 0) + Math.sqrt(2 * G_MOON * BODY_SCALE * S * LRV.len * BODY_SCALE * S * 0.8); BG.air = true; k.hop = false; spawnDust(14, 0.6, 0.8, false); }
@@ -1516,7 +1527,9 @@ function driveStep(t) {
   BG.dist += Math.abs(BG.v * dt);
   // --- ground: height under the buggy, and its slope from four points around it ---
   const mc = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), ll = mc.toLngLat(), llw = [wrapLon(ll.lng), ll.lat];
-  const elev = (dx, dy) => map.queryTerrainElevation([wrapLon(ll.lng + dx), ll.lat + dy]) || 0;
+  // MapLibre can throw while a height tile is half swapped in (fast driving); keep the last good height then
+  const qElev = p => { try { return map.queryTerrainElevation(p); } catch (e) { return null; } };
+  const elev = (dx, dy) => { const v = qElev([wrapLon(ll.lng + dx), ll.lat + dy]); return v == null ? (BG.g || 0) : v; };
   const g = elev(0, 0), k1 = BODY_SCALE * S, mpd = 111319.49;          // map metres per degree of latitude
   const half = LRV.base / 2 * k1, side = LRV.track / 2 * k1, cl = Math.cos(ll.lat * D2R);
   const fx = Math.sin(h), fy = Math.cos(h);
@@ -1527,7 +1540,8 @@ function driveStep(t) {
   // Height tiles arrive and sharpen while you drive, which changes the ground under you without you moving.
   // Re-measure where the buggy was last frame and carry it along with any such change, so it never drops
   // out of the sky or gets buried when a sharper tile loads.
-  if (BG.z != null && BG.pll) BG.z += (map.queryTerrainElevation(BG.pll) || 0) - BG.g;
+  const gp = BG.z != null && BG.pll ? qElev(BG.pll) : null;
+  if (gp != null) BG.z += gp - BG.g;
   BG.pll = llw;
   if (BG.z == null) { BG.z = g; BG.vz = 0; }
   else {
@@ -1564,19 +1578,26 @@ function driveStep(t) {
   }
   // --- tracks ---
   const seg = BG.trail[BG.trail.length - 1];
-  if (BG.air) { if (seg.length) BG.trail.push([]); }
-  else {
-    const last = seg[seg.length - 1];
-    if (!last || Math.hypot((ll.lng - last[0]) * cl, ll.lat - last[1]) * 111319.49 / BODY_SCALE > 0.8 * S) {
-      seg.push([ll.lng, ll.lat]);
-      if (seg.length > 6000) BG.trail.push([[ll.lng, ll.lat]]);
-      if (t - (BG.trailT || 0) > 150) { BG.trailT = t; drawTrail(); }
-    }
+  if (BG.air) { if (seg.length) { BG.trail.push([]); drawTrail(); } }
+  else if (!BG.tll || Math.hypot((ll.lng - BG.tll[0]) * cl, ll.lat - BG.tll[1]) * mpd / BODY_SCALE > Math.min(0.8 * S, 0.4 + Math.abs(BG.v) * 0.06)) {
+    BG.tll = [ll.lng, ll.lat];
+    const rx = fy / (mpd * cl), ry = -fx / mpd;                 // one map metre to the right, in degrees
+    const pt = o => [ll.lng + rx * o * k1, ll.lat + ry * o * k1];
+    const tw = LRV.track / 2, ww = LRV.wheelW / 2;
+    const row = [pt(-tw - ww), pt(-tw + ww), pt(tw - ww), pt(tw + ww)];
+    if (seg.length && Math.hypot((ll.lng - BG.tll0[0]) * cl, ll.lat - BG.tll0[1]) * mpd > 50 * LRV.len * k1) seg.length = 0;   // a teleport: start fresh
+    seg.push(row); BG.tll0 = BG.tll;
+    if (seg.length >= 150) {                                       // close this chunk; the next one starts where it ends
+      BG.trail.push([row]);
+      if (BG.trail.length > 60) BG.trail.shift();
+      drawTrail();
+    } else if (t - (BG.trailT || 0) > 120) { BG.trailT = t; drawTrail(false); }
   }
   // --- chase camera ---
   let db = wrap180(BG.heading - BG.camBearing); BG.camBearing += db * Math.min(1, dt * 2.5);
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
-  const lenMap = LRV.len * k1, z = Math.log2(mode.px * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
+  const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (LRV.vmax * S * 6)));   // pull back a bit at speed
+  const lenMap = LRV.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
   map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(map.getMaxZoom(), Math.max(3, z)) });
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
@@ -1589,8 +1610,9 @@ function driveKey(e) {
   if (a) { BG.keys[a] = down; e.preventDefault(); return; }
   if (!down) return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) BG.keys.hop = true; }
+  else if (/^Digit[1-4]$/.test(e.code)) setBuggySpeed([1, 4, 15, 50][+e.code.slice(5) - 1]);
   else if (e.code === 'KeyC') BG.camMode = (BG.camMode + 1) % 3;
-  else if (e.code === 'KeyR') { BG.trail = [[]]; drawTrail(); }
+  else if (e.code === 'KeyR') { BG.trail = [[]]; BG.tll = null; drawTrail(); }
   else if (e.key === '+' || e.key === '=') BG.zoomAdj = Math.min(2, BG.zoomAdj + 0.25);
   else if (e.key === '-') BG.zoomAdj = Math.max(-3, BG.zoomAdj - 0.25);
   else if (e.key === 'Escape') stopDrive();
@@ -1612,7 +1634,7 @@ async function startDrive() {
     driveBtn.disabled = true; driveBtn.textContent = 'Loading the buggy…';
     try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
     catch (e) { showToast('Could not load the 3D engine (three.js). Check your connection and try again.'); }
-    driveBtn.disabled = false; driveBtn.innerHTML = '&#128665; Drive the moon buggy';
+    driveBtn.disabled = false; driveBtn.innerHTML = DRIVE_LABEL;
     if (!THREE) return;
   }
   if (measuring) setMeasuring(false);
@@ -1622,24 +1644,31 @@ async function startDrive() {
   map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
   map.setMaxZoom(21);
   buggyPrev.sky = map.getSky();
-  map.setSky({ 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 });
+  map.setSky(MOON ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
+    : { 'sky-color': '#b98d68', 'horizon-color': '#e6c7a4', 'fog-color': '#d9b590', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });   // butterscotch Mars sky
   HANDLERS.forEach(hn => map[hn].disable());
+  // Labels far from the buggy make MapLibre look up heights in tiles it hasn't loaded, which throws at speed;
+  // take them off the map while driving and put them back afterwards.
+  BG.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
+  BG.offMarkers.forEach(m => m.remove());
   if (!map.getSource('trail')) {
-    map.addSource('trail', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1a1512', 'line-opacity': 0.45 } }, 'grid');
+    for (const id of ['trail', 'trail-live']) {
+      map.addSource(id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, tolerance: 0, maxzoom: 22, buffer: 16 });
+      map.addLayer({ id, type: 'fill', source: id, paint: { 'fill-color': '#1a1512', 'fill-opacity': 0.4, 'fill-antialias': true } }, 'grid');
+    }
   }
   if (!buggyLayer) { buggyLayer = makeBuggyLayer(); map.addLayer(buggyLayer); }
   // start where you are looking if you are zoomed in, otherwise where the LRV first drove: Apollo 15 at Hadley Rille
-  const here = map.getZoom() >= 7, start = here ? map.getCenter() : new maplibregl.LngLat(3.634, 26.132);
+  const here = map.getZoom() >= 7, start = here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start);
   Object.assign(BG, { on: true, mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, g: 0, vz: 0, v: 0, steer: 0, pitch: 0, roll: 0, air: false,
-    heading: here ? map.getBearing() : 0, camBearing: here ? map.getBearing() : 0, keys: {}, t: 0, dist: 0, trail: [[]] });
+    heading: here ? map.getBearing() : 0, camBearing: here ? map.getBearing() : 0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null });
   BG.dust.forEach(d => { d.life = 0; d.m.visible = false; });
-  drawTrail(); setBuggySize(BG.S);
+  drawTrail(); setBuggySize(BG.S); setBuggySpeed(BG.M);
   document.body.classList.add('driving');
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
-  if (!here) showToast('Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971');
+  if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
   BG.raf = requestAnimationFrame(driveStep);
 }
 function stopDrive() {
@@ -1647,6 +1676,7 @@ function stopDrive() {
   BG.on = false; cancelAnimationFrame(BG.raf); BG.keys = {};
   document.body.classList.remove('driving');
   HANDLERS.forEach(hn => map[hn].enable());
+  (BG.offMarkers || []).forEach(m => m.addTo(map)); BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
   map.setSky(buggyPrev.sky || {});
   if (proj !== 'mercator') map.setProjection({ type: proj });

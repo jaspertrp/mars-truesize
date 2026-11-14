@@ -39,12 +39,13 @@ countries and settings. Moon imagery comes from NASA Moon Trek (LRO WAC, LOLA re
 3D heights are the tiles in `moon-dem/`, made with `tools/build_moon_dem.py` from NASA's LRO LOLA 64 px/degree
 DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
 
-**Drive the moon buggy:** on the Moon, the *Drive the moon buggy* button puts an Apollo Lunar Roving Vehicle on the
-3D terrain (a three.js model in a MapLibre custom layer, loaded only when you start driving). Arrow keys or WASD
-to drive, Shift to boost, Space to hop, C to change camera, Esc to stop. It drives in Moon gravity (1.62 m/s²),
-kicks up dust on airless parabolas and leaves tyre tracks. *Size* draws it 1×, 10× or 40× real size, with speed and
-gravity scaled to match. The ground is the LOLA DEM (~470 m per pixel), so the terrain is gently rolling: small craters
-are in the photo but not in the heights.
+**Drive a buggy:** on the Moon and on Mars, the *Drive* button puts an Apollo Lunar Roving Vehicle on the 3D
+terrain (a three.js model in a MapLibre custom layer, loaded only when you start driving). It starts where you are
+looking, or at Apollo 15 (Moon) / Jezero Crater (Mars) when zoomed out. Arrow keys or WASD to drive, Shift to boost,
+1–4 for top speed (1×, 4×, 15×, 50× the real LRV's 13 km/h), Space to hop, C to change camera, Esc to stop. It drives
+in the world's own gravity (Moon 1.62 m/s², Mars 3.72 m/s²), kicks up dust and leaves tyre tracks, drawn as
+real-size strips on the ground so they keep their width at every zoom. *Size* draws it 1×, 10× or 40× real size.
+The Moon's ground is the LOLA DEM (~470 m per pixel), so small craters are in the photo but not in the heights.
 
 ## Europa
 
