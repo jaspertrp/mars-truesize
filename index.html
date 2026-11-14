@@ -2244,16 +2244,18 @@ const R_EQ_M = R_BODY * 1000;   // equatorial radius in metres (the unit of the 
 const spaceLayer = {
   id: 'space-view', type: 'custom', renderingMode: '3d',
   onAdd(m, gl) {
-    const vs = `attribute vec2 a_pos; varying vec2 v_ndc; void main() { v_ndc = a_pos; gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+    // ray directions at the four screen corners come from MapLibre's own camera matrix, so the rings stay locked to the map
+    const vs = `attribute vec2 a_pos; uniform vec3 u_d00, u_d10, u_d01, u_d11; varying vec3 v_dir;
+      void main() { vec2 t = a_pos * 0.5 + 0.5; v_dir = mix(mix(u_d00, u_d10, t.x), mix(u_d01, u_d11, t.x), t.y); gl_Position = vec4(a_pos, 0.0, 1.0); }`;
     const fs = `
       precision highp float;
-      varying vec2 v_ndc;
-      uniform vec3 u_o, u_F, u_R, u_U;     // camera position and axes, in equatorial radii (y = spin axis)
+      varying vec3 v_dir;
+      uniform vec3 u_o;                    // camera position, in equatorial radii (y = spin axis)
       uniform vec3 u_up;                   // local vertical at the jet
-      uniform float u_tx, u_ty, u_q, u_w, u_rings, u_rin, u_rout, u_hasPlanet;
+      uniform float u_q, u_w, u_rings, u_rin, u_rout, u_hasPlanet;
       uniform sampler2D u_planet, u_ring;
       void main() {
-        vec3 d = normalize(u_F + v_ndc.x * u_tx * u_R + v_ndc.y * u_ty * u_U), o = u_o;
+        vec3 d = normalize(v_dir), o = u_o;
         // planet: the ellipsoid x^2 + (y/q)^2 + z^2 = 1
         vec3 os = vec3(o.x, o.y / u_q, o.z), ds = vec3(d.x, d.y / u_q, d.z);
         float a = dot(ds, ds), b = dot(os, ds), c = dot(os, os) - 1.0, h = b * b - a * c, tp = -1.0;
@@ -2298,12 +2300,12 @@ const spaceLayer = {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
     const U = nm => gl.getUniformLocation(prog, nm);
-    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), F: U('u_F'), R: U('u_R'), U: U('u_U'), tx: U('u_tx'), ty: U('u_ty'),
+    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), d00: U('u_d00'), d10: U('u_d10'), d01: U('u_d01'), d11: U('u_d11'),
       q: U('u_q'), w: U('u_w'), up: U('u_up'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
   },
-  render(gl) {
+  render(gl, args) {
     const V = FL.on && FL.view;
-    if (!V) return;
+    if (!V || !THREE) return;
     const hEq = V.agl / R_EQ_M, w = Math.min(1, Math.max(0, (hEq - 0.008) / (0.04 - 0.008)));
     const rings = SATURN && ringsOn;
     if (w <= 0 && !rings) return;
@@ -2316,17 +2318,18 @@ const spaceLayer = {
     // local east / north / up in the same frame
     const E = [cz, 0, -sx], Nn = [nrm[1] * E[2] - nrm[2] * E[1], nrm[2] * E[0] - nrm[0] * E[2], nrm[0] * E[1] - nrm[1] * E[0]];
     const toW = v => [v[0] * E[0] + v[1] * Nn[0] + v[2] * nrm[0], v[0] * E[1] + v[1] * Nn[1] + v[2] * nrm[1], v[0] * E[2] + v[1] * Nn[2] + v[2] * nrm[2]];
-    const F = toW(V.F), up0 = toW([0, 0, 1]);
-    const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-    const nz = v => { const l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
-    let R = nz(cr(F, up0)), Up = cr(R, F);
-    const ca = Math.cos(V.roll), sa = Math.sin(V.roll);
-    [R, Up] = [[R[0] * ca + Up[0] * sa, R[1] * ca + Up[1] * sa, R[2] * ca + Up[2] * sa], [Up[0] * ca - R[0] * sa, Up[1] * ca - R[1] * sa, Up[2] * ca - R[2] * sa]];
-    const fov = (map.transform.fov || 36.87) * D2R, cvs = map.getCanvas(), ty = Math.tan(fov / 2), tx = ty * cvs.width / cvs.height;
+    // unproject the screen corners (near and far plane) through the map's matrix: mercator x east, y south, z up
+    const inv = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).invert();
+    const un = (x, y, z) => new THREE.Vector4(x, y, z, 1).applyMatrix4(inv), dirAt = (x, y) => {
+      const a = un(x, y, -1), b = un(x, y, 1);
+      return [b.x / b.w - a.x / a.w, -(b.y / b.w - a.y / a.w), b.z / b.w - a.z / a.w];   // not normalised: stays linear across the screen
+    };
+    const D0 = [dirAt(-1, -1), dirAt(1, -1), dirAt(-1, 1), dirAt(1, 1)], sc = 1 / (Math.hypot(...D0[0]) || 1);
+    const D = D0.map(p => toW([p[0] * sc, p[1] * sc, p[2] * sc]));
     const L = this.loc, pt = w > 0 ? spaceTexture(gl, baseKey) : null;
     gl.useProgram(this.prog);
-    gl.uniform3f(L.o, ...o); gl.uniform3f(L.F, ...F); gl.uniform3f(L.R, ...R); gl.uniform3f(L.U, ...Up); gl.uniform3f(L.up, ...nrm);
-    gl.uniform1f(L.tx, tx); gl.uniform1f(L.ty, ty); gl.uniform1f(L.q, Q); gl.uniform1f(L.w, w);
+    gl.uniform3f(L.o, ...o); gl.uniform3f(L.d00, ...D[0]); gl.uniform3f(L.d10, ...D[1]); gl.uniform3f(L.d01, ...D[2]); gl.uniform3f(L.d11, ...D[3]); gl.uniform3f(L.up, ...nrm);
+    gl.uniform1f(L.q, Q); gl.uniform1f(L.w, w);
     gl.uniform1f(L.rings, rings ? 1 : 0); gl.uniform1f(L.rin, SATURN ? RING_IN : 0); gl.uniform1f(L.rout, SATURN ? RING_OUT : 0);
     gl.uniform1f(L.has, pt && pt.ready ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, pt && pt.ready ? pt.tex : null); gl.uniform1i(L.planet, 0);
