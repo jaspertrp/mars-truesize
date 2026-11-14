@@ -205,6 +205,27 @@ function getSrc(bm, z, r, c) {
   return p;
 }
 const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D;
+// Near the poles the map is drawn by stretching the last row of pixels (above 85°) into a cap, which looks
+// like a pinwheel. Fading the last few degrees into one average polar value turns that into a smooth cap.
+const POLE_FADE0 = 81.5, POLE_FADE1 = 85.05;
+const poleWeight = lat => { const t = (Math.abs(lat) - POLE_FADE0) / (POLE_FADE1 - POLE_FADE0); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
+const poleColorCache = {};
+function poleColor(bm) {        // -> Promise<{n:'rgb()', s:'rgb()'}|null>, averaged from the coarsest source level
+  return poleColorCache[bm] || (poleColorCache[bm] = Promise.all([getSrc(bm, 0, 0, 0), getSrc(bm, 0, 0, 1)]).then(imgs => {
+    const acc = { n: [0, 0, 0, 0], s: [0, 0, 0, 0] };
+    for (const img of imgs) {
+      if (!img) continue;
+      const w = img.width, h = img.height, k = Math.max(1, Math.round(h * 2.5 / 180));   // the outer 2.5°
+      const cv = new OffscreenCanvas(w, h), cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+      for (const [key, y0] of [['n', 0], ['s', h - k]]) {
+        const d = cx.getImageData(0, y0, w, k).data;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0) { acc[key][0] += d[i]; acc[key][1] += d[i + 1]; acc[key][2] += d[i + 2]; acc[key][3]++; }
+      }
+    }
+    const f = a => a[3] ? `rgb(${Math.round(a[0] / a[3])},${Math.round(a[1] / a[3])},${Math.round(a[2] / a[3])})` : null;
+    return acc.n[3] ? { n: f(acc.n), s: f(acc.s) } : null;
+  }).catch(() => null));
+}
 const failures = {};
 maplibregl.addProtocol('eq', async params => {
   const [bm, zs_, xs, ys] = params.url.replace('eq://', '').split('/');
@@ -233,6 +254,14 @@ maplibregl.addProtocol('eq', async params => {
     const lat = tile2lat(y + (j + 0.5) / 512, n);
     const sy = Math.min(inter.height - 1, Math.max(0, Math.floor(((90 - lat) / span - r0) * ts)));
     octx.drawImage(inter, sx, sy, sw, 1, 0, j, 512, 1);
+  }
+  if (!OVERLAYS[bm] && Math.max(Math.abs(latN), Math.abs(latS)) > POLE_FADE0) {
+    const pc = await poleColor(bm);
+    if (pc) for (let j = 0; j < 512; j++) {
+      const lat = tile2lat(y + (j + 0.5) / 512, n), w = poleWeight(lat);
+      if (w > 0) { octx.globalAlpha = w; octx.fillStyle = lat > 0 ? pc.n : pc.s; octx.fillRect(0, j, 512, 1); }
+    }
+    octx.globalAlpha = 1;
   }
   const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
   return { data: await blob.arrayBuffer() };
@@ -272,6 +301,22 @@ function getDem(z, r, c) {
   if (demCache.size > 200) demCache.delete(demCache.keys().next().value);
   return p;
 }
+let poleH = null;
+function poleHeight() {          // mean height of the outer 2.5° around each pole, from the coarsest DEM level
+  return poleH || (poleH = Promise.all([getDem(0, 0, 0), getDem(0, 0, 1)]).then(ts => {
+    let n = 0, nc = 0, s = 0, sc = 0;
+    for (const t of ts) {
+      if (!t) continue;
+      const k = Math.max(1, Math.round(t.h * 2.5 / 180));
+      for (let y = 0; y < k; y++) for (let x = 0; x < t.w; x++) {
+        const a = t.px[y * t.w + x], b = t.px[(t.h - 1 - y) * t.w + x];
+        if (a > -20000 && a < 30000) { n += a; nc++; }
+        if (b > -20000 && b < 30000) { s += b; sc++; }
+      }
+    }
+    return nc && sc ? { n: n / nc, s: s / sc } : null;
+  }).catch(() => null));
+}
 maplibregl.addProtocol('dem', async params => {
   const [zz, xx, yy] = params.url.replace('dem://', '').split('/').map(Number);
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
@@ -287,10 +332,12 @@ maplibregl.addProtocol('dem', async params => {
     jobs.push(getDem(zs, r, cc).then(t => tiles.set(r * 100000 + c, t)));
   }
   await Promise.all(jobs);
+  const pole = Math.max(Math.abs(latN), Math.abs(latS)) > POLE_FADE0 ? await poleHeight() : null;
   const W = 512, img = new ImageData(W, W), d = img.data;
   for (let j = 0; j < W; j++) {
     const lat = tile2lat(yy + (j + 0.5) / W, n);
     const fy = (90 - lat) / span; let r = Math.min(rows - 1, Math.max(0, Math.floor(fy)));
+    const pw = pole ? poleWeight(lat) : 0, ph = pole ? (lat > 0 ? pole.n : pole.s) : 0;
     for (let i = 0; i < W; i++) {
       const fx = (lon0 + (i + 0.5) / W * lonSpan + 180) / span, c = Math.floor(fx);
       const t = tiles.get(r * 100000 + c);
@@ -303,6 +350,7 @@ maplibregl.addProtocol('dem', async params => {
         h = (a * (1 - ax) + b * ax) * (1 - ay) + (e * (1 - ax) + f * ax) * ay;
         if (!(h > -20000 && h < 30000)) h = 0;
       }
+      if (pw > 0) h = h * (1 - pw) + ph * pw;
       h += DEM_OFFSET;
       const v = h + 32768, k = (j * W + i) * 4;
       d[k] = v >> 8; d[k + 1] = Math.floor(v) & 255; d[k + 2] = Math.floor((v - Math.floor(v)) * 256); d[k + 3] = 255;
@@ -797,7 +845,9 @@ SITES.forEach(([n], i) => siteSel.add(new Option(n, i)));
 siteSel.onchange = () => {
   const s = SITES[+siteSel.value]; siteSel.value = ''; if (!s) return;
   if (!showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
-  map.flyTo({ center: [s[2], s[1]], zoom: 15.5, pitch: 0, bearing: 0, duration: 3000 });
+  // a gentle arc: out a little, across, then down to a zoom where HiRISE and the terrain still look good
+  map.flyTo({ center: [s[2], s[1]], zoom: 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
+    easing: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, essential: true });
 };
 
 // ---------- 3D terrain ----------
