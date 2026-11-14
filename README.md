@@ -48,8 +48,9 @@ so it has no 3D terrain; instead of landing sites it has a list of features to f
 
 ## Jupiter (flattened globe)
 
-`?body=jupiter`. The map is Cassini's colour map from 11–12 Dec 2000 (PIA07782, NASA/JPL/Space Science
-Institute), resampled and cut into `jupiter-tiles/` by `tools/build_jupiter_tiles.py`.
+`?body=jupiter`. The map is Björn Jónsson's merged Cassini (Dec 2000) + Juno (poles) global map, 40 px per
+degree, published by The Planetary Society under CC BY 3.0 (credit: NASA/JPL-Caltech/SSI/SwRI/MSSS/ASI/INAF/
+JIRAM/Björn Jónsson). It is resampled and cut into `jupiter-tiles/` by `tools/build_jupiter_tiles.py`.
 
 Jupiter is visibly flattened (polar radius 66,854 km, equatorial 71,492 km), so the site draws it as an
 ellipsoid: `installEllipsoid()` squashes MapLibre's globe matrix along the polar axis and recomputes the

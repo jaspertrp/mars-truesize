@@ -216,7 +216,7 @@ document.querySelectorAll('#bodysw button').forEach(b => {
   b.onclick = () => { if (b.dataset.b === BODY) return; try { save(); } catch (e) {} location.href = location.pathname + '?body=' + b.dataset.b; };
 });
 if (MOON) { const tl = document.getElementById('trekLink'); tl.href = 'https://trek.nasa.gov/moon/'; tl.textContent = 'NASA Moon Trek'; }
-if (JUPITER) { const tl = document.getElementById('trekLink'); tl.href = 'https://science.nasa.gov/photojournal/cassinis-best-maps-of-jupiter-cylindrical-map/'; tl.textContent = 'NASA Photojournal (PIA07782)'; tl.previousSibling.textContent = ' · map via '; }
+if (JUPITER) { const tl = document.getElementById('trekLink'); tl.href = 'https://www.planetary.org/space-images/merged-cassini-and-juno'; tl.textContent = 'The Planetary Society'; tl.previousSibling.textContent = ' · map via '; }
 if (EUROPA) { const tl = document.getElementById('trekLink'); tl.href = 'https://astrogeology.usgs.gov/search/map/europa_voyager_galileo_ssi_global_mosaic_500m'; tl.textContent = 'USGS Astrogeology'; tl.previousSibling.textContent = ' · map via '; }
 
 const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : JUPITER ? J_A : 3389.5;
@@ -256,12 +256,13 @@ const EUROPA_BASEMAPS = {
     url: (z, r, c) => new URL(`europa-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Europa Voyager–Galileo SSI global mosaic 500 m: NASA/JPL/USGS' }
 };
-// Jupiter: Cassini's Dec 2000 colour map (PIA07782), resampled to the flattened globe's latitudes and cut into
-// our own tiles (jupiter-tiles/, tools/build_jupiter_tiles.py). The clouds have moved on since.
+// Jupiter: Björn Jónsson's global map (Cassini, Dec 2000, with Juno's poles; 40 px/degree; CC BY 3.0),
+// resampled to the flattened globe's latitudes and cut into our own tiles (jupiter-tiles/,
+// tools/build_jupiter_tiles.py). The clouds have moved on since.
 const JUPITER_BASEMAPS = {
-  cassini: { label: 'Cassini colour (Dec 2000)', ts: 256, max: 3, out: 'image/jpeg', bg: '#b9a58c',
+  cassini: { label: 'Cassini + Juno (2000)', ts: 256, max: 5, out: 'image/jpeg', bg: '#b9a58c',
     url: (z, r, c) => new URL(`jupiter-tiles/${z}/${r}/${c}.jpg`, location.href).href,
-    credit: 'Cassini ISS colour map, 11–12 Dec 2000: NASA/JPL/Space Science Institute' }
+    credit: 'Map: NASA/JPL-Caltech/SSI/SwRI/MSSS/ASI/INAF/JIRAM/Björn Jónsson, CC BY 3.0' }
 };
 const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : {
   viking: { label: 'Colour (Viking)', ts: 256, max: 7, out: 'image/jpeg', bg: '#6b3b26',
@@ -662,7 +663,7 @@ map.on('move', updateScale);
 
 // landmarks
 const FEATURES = JUPITER ? [
-  ['Great Red Spot', -22, -50], ['Equatorial Zone', 0, 110], ['North Equatorial Belt', 14, 110],
+  ['Great Red Spot', -22, -53], ['Equatorial Zone', 0, 110], ['North Equatorial Belt', 14, 110],
   ['South Equatorial Belt', -15, 110], ['North Tropical Zone', 20, 150], ['South Tropical Zone', -25, 150],
   ['North Temperate Belt', 27, -150], ['South Temperate Belt', -30, -150], ['North Polar Region', 62, 30],
   ['South Polar Region', -62, 30]
