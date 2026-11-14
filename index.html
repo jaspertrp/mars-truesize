@@ -56,6 +56,9 @@
   .terr .exag.on{opacity:1;pointer-events:auto}
   .terr .exag input{flex:1;accent-color:var(--accent);min-width:60px}
   .terr .exag span{width:30px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+  .basesel .mcol{display:none;align-items:center;gap:5px;color:var(--text);cursor:pointer;white-space:nowrap}
+  .basesel .mcol.on{display:flex}
+  .basesel .mcol input{accent-color:var(--accent);margin:0}
   .basesel select{flex:1;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:13px}
   .measure{position:absolute;z-index:15;left:50%;bottom:34px;transform:translateX(-50%);background:var(--panel,#1c1210);border:1px solid var(--accent);color:var(--text);padding:7px 8px 7px 14px;border-radius:9px;font-size:13px;display:none;align-items:center;gap:10px;max-width:92%;box-shadow:0 4px 16px rgba(0,0,0,.35)}
   .measure.on{display:flex}
@@ -186,7 +189,7 @@
     <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button></div>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
-  <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
+  <div class="basesel"><label for="base">Basemap</label><select id="base"></select><label class="mcol" id="mcolWrap" title="The CTX, THEMIS and HiRISE images are black and white; this colours them from the Viking colour mosaic"><input type="checkbox" id="tColour"> Colour</label></div>
   <div class="terr hir">
     <label class="tog"><input type="checkbox" id="tHirise" checked> HiRISE detail</label>
     <select id="site"><option value="">Fly to a landing site…</option></select>
@@ -341,11 +344,11 @@ const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUP
   relief: { label: 'Relief (MOLA/HRSC)', ts: 256, max: 8, out: 'image/jpeg', bg: '#334',
     url: (z, r, c) => `${TREK}Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw/1.0.0/default/default028mm/${z}/${r}/${c}.jpg`,
     credit: 'MOLA/HRSC blended colour shaded relief, 200 m: NASA/JPL/GSFC/ESA/DLR/FU Berlin/USGS' },
-  themis: { label: 'Infrared (THEMIS)', ts: 256, max: 9, out: 'image/webp',
+  themis: { label: 'Infrared (THEMIS)', ts: 256, max: 9, out: 'image/webp', grey: true,
     url: (z, r, c) => `${TREK}THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018/1.0.0/default/default028mm/${z}/${r}/${c}.png`,
     credit: 'THEMIS day IR controlled mosaic, 100 m (±65°): NASA/JPL/ASU/USGS' },
   // The CTX mosaic is a preliminary one with gaps between image strips, so THEMIS is drawn underneath it.
-  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555', under: 'themis',
+  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555', under: 'themis', grey: true,
     url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
     credit: 'Global CTX mosaic: NASA/JPL/MSSS/Caltech Murray Lab/Esri' },
   classic: { label: 'Classic (8k texture)', local: true,
@@ -354,7 +357,7 @@ const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUP
 // HiRISE: every published HiRISE image (~25 cm/px) in one uncontrolled mosaic, served by Esri.
 // Covers only a few percent of Mars, so it's an overlay that fades in when zoomed in; gaps stay transparent.
 const OVERLAYS = {
-  hirise: { ts: 512, max: 17, out: 'image/webp',
+  hirise: { ts: 512, max: 17, out: 'image/webp', grey: true,
     url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/HiRISE/MapServer/tile/${z}/${r}/${c}`,
     credit: 'HiRISE: NASA/JPL/University of Arizona/USGS/Esri' }
 };
@@ -397,9 +400,49 @@ function poleColor(bm) {        // -> Promise<{n:'rgb()', s:'rgb()'}|null>, aver
   }).catch(() => null));
 }
 const failures = {};
+// The CTX, THEMIS and HiRISE images are black and white. With "Mars colour" on, each of their tiles takes its
+// colour from the same spot in the Viking colour mosaic (232 m) and keeps its own detail as brightness
+// (a ratio "pan-sharpen"). Where Viking can't be reached, a plain Mars colour ramp is used instead.
+let marsColour = !(saved && saved.colour === false);
+const lum = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+const RAMP = [[0, [26, 15, 10]], [0.45, [146, 88, 55]], [0.75, [205, 150, 105]], [1, [240, 205, 170]]];
+function rampColour(t) {
+  for (let i = 1; i < RAMP.length; i++) if (t <= RAMP[i][0]) {
+    const [t0, a] = RAMP[i - 1], [t1, b] = RAMP[i], f = (t - t0) / (t1 - t0);
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+  return RAMP[RAMP.length - 1][1];
+}
+function tintGrey(out, ref) {
+  const W = out.width, octx = out.getContext('2d'), img = octx.getImageData(0, 0, W, W), d = img.data;
+  const rd = ref ? ref.getContext('2d').getImageData(0, 0, W, W).data : null;
+  // match the tile's overall brightness to Viking's, so the colour mosaic's tone carries over
+  let sd = 0, sc = 0, cnt = 0;
+  if (rd) for (let i = 0; i < d.length; i += 32) if (d[i + 3] > 0 && rd[i + 3] > 0) { sd += lum(d, i); sc += lum(rd, i); cnt++; }
+  const useRef = rd && cnt > 50 && sc / cnt > 4;
+  const gain = useRef ? Math.min(2, Math.max(0.5, sc / Math.max(1, sd))) : 1;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const y = lum(d, i);
+    if (useRef && rd[i + 3] > 0) {
+      const k = Math.min(3.5, Math.max(0.15, y * gain / Math.max(6, lum(rd, i))));
+      d[i] = Math.min(255, rd[i] * k); d[i + 1] = Math.min(255, rd[i + 1] * k); d[i + 2] = Math.min(255, rd[i + 2] * k);
+    } else {
+      const c = rampColour(y / 255); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
+    }
+  }
+  octx.putImageData(img, 0, 0);
+}
 maplibregl.addProtocol('eq', async params => {
-  const [bm, zs_, xs, ys] = params.url.replace('eq://', '').split('/');
-  const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys, n = 2 ** z;
+  const [bm, zs_, xs, ysq] = params.url.replace('eq://', '').split('/'), ys = ysq.split('?')[0];
+  const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys;
+  const out = await renderEq(bm, z, x, y);
+  if (MARS && B.grey && /[?&]c=1/.test(params.url)) tintGrey(out, await renderEq('viking', z, x, y, true).catch(() => null));
+  const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
+  return { data: await blob.arrayBuffer() };
+});
+async function renderEq(bm, z, x, y, isRef) {
+  const B = LAYERDEF(bm), n = 2 ** z;
   const lon0 = x / n * 360 - 180, lonSpan = 360 / n;
   const latN = tile2lat(y, n), latS = tile2lat(y + 1, n);
   // pick the source level whose pixel size matches; boost a little towards the poles (Mercator stretch)
@@ -415,8 +458,8 @@ maplibregl.addProtocol('eq', async params => {
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++)
     jobs.push(getSrc(bm, zs, r, ((c % cols) + cols) % cols).then(img => { if (img) ictx.drawImage(img, (c - c0) * ts, (r - r0) * ts); return !!img; }));
   const ok = (await Promise.all(jobs)).filter(Boolean).length;
-  failures[bm] = ok ? 0 : (failures[bm] || 0) + 1;
-  if (failures[bm] > 8) maybeFallback(bm);
+  if (isRef && !ok) return null;
+  if (!isRef) { failures[bm] = ok ? 0 : (failures[bm] || 0) + 1; if (failures[bm] > 8) maybeFallback(bm); }
   const out = new OffscreenCanvas(512, 512), octx = out.getContext('2d');
   if (B.bg && B.out === 'image/jpeg') { octx.fillStyle = B.bg; octx.fillRect(0, 0, 512, 512); }
   const sx = ((lon0 + 180) / span - c0) * ts, sw = lonSpan / span * ts;
@@ -433,9 +476,8 @@ maplibregl.addProtocol('eq', async params => {
     }
     octx.globalAlpha = 1;
   }
-  const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
-  return { data: await blob.arrayBuffer() };
-});
+  return out;
+}
 const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : JUPITER ? 'cassini' : 'relief';
 // the visitor's chosen basemap, read up front so an early fallback can never overwrite it
 let wantedBase = (saved && saved.v >= 3 && BASEMAPS[saved.base] && saved.base) || DEFAULT_BASE;
@@ -546,13 +588,14 @@ maplibregl.addProtocol('dem', async params => {
   return { data: await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer() };
 });
 
+const eqUrl = k => `eq://${k}/{z}/{x}/{y}` + (LAYERDEF(k).grey && MARS ? `?c=${marsColour ? 1 : 0}` : '');
 const baseSources = {
-  'ov-hirise': { type: 'raster', tiles: ['eq://hirise/{z}/{x}/{y}'], tileSize: 512, minzoom: 11, maxzoom: 18 }
+  'ov-hirise': { type: 'raster', tiles: [eqUrl('hirise')], tileSize: 512, minzoom: 11, maxzoom: 18 }
 }, baseLayers = [];
 for (const [k, B] of Object.entries(BASEMAPS)) {
   baseSources['base-' + k] = B.local
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
-    : { type: 'raster', tiles: [`eq://${k}/{z}/{x}/{y}`], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
+    : { type: 'raster', tiles: [eqUrl(k)], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
   baseLayers.push({ id: 'base-' + k, type: 'raster', source: 'base-' + k,
     layout: { visibility: k === wantedBase || k === BASEMAPS[wantedBase].under ? 'visible' : 'none' },
     paint: { 'raster-fade-duration': 200, 'raster-resampling': 'linear' } });
@@ -1147,10 +1190,25 @@ function setBase(k, auto) {
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
   for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k || kk === BASEMAPS[k].under ? 'visible' : 'none');
-  updateCredit();
+  updateCredit(); if (typeof syncColourToggle === 'function') syncColourToggle();
   save();
 }
 baseSel.onchange = () => setBase(baseSel.value);
+// "Colour" shows on Mars when a black-and-white layer is in view (CTX, THEMIS, or the HiRISE overlay)
+const tColour = document.getElementById('tColour'), mcolWrap = document.getElementById('mcolWrap');
+tColour.checked = marsColour;
+function syncColourToggle() {
+  let hir = false; try { hir = showHirise; } catch (e) {}
+  document.getElementById('mcolWrap').classList.toggle('on', MARS && (!!BASEMAPS[baseKey]?.grey || hir));
+}
+tColour.onchange = () => {
+  marsColour = tColour.checked;
+  for (const k of [...Object.keys(BASEMAPS), 'hirise']) {
+    const id = k === 'hirise' ? 'ov-hirise' : 'base-' + k, src = map.getSource(id);
+    if (LAYERDEF(k).grey && src && src.setTiles) src.setTiles([eqUrl(k)]);
+  }
+  save();
+};
 
 // ---------- hide labels that are over the horizon or far outside the view ----------
 // (on the globe MapLibre can otherwise draw far-side markers in odd places when zoomed in)
@@ -1172,7 +1230,8 @@ const tHirise = document.getElementById('tHirise');
 if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
 function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
-tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
+tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); syncColourToggle(); save(); };
+syncColourToggle();
 function updateCredit() {
   const extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
@@ -1225,7 +1284,7 @@ function save() {
   if (restoring) return;
   try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 4, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
-    hirise: typeof showHirise === 'undefined' ? true : showHirise,
+    hirise: typeof showHirise === 'undefined' ? true : showHirise, colour: typeof marsColour === 'undefined' ? true : marsColour,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
 
