@@ -47,6 +47,13 @@ in the world's own gravity (Moon 1.62 m/s², Mars 3.72 m/s²), kicks up dust and
 real-size strips on the ground so they keep their width at every zoom. *Size* draws it 1×, 10× or 40× real size.
 The Moon's ground is the LOLA DEM (~470 m per pixel), so small craters are in the photo but not in the heights.
 
+**Fly a fighter jet:** the *Fly* button (Moon and Mars) puts a generic twin-tail fighter, at true size, 1.2 km above
+where you are looking, or over the Montes Apenninus / Valles Marineris when zoomed out. Arrow keys pitch and roll
+(like a flight stick; the HUD button or I swaps up and down), A/D rudder, W/S throttle, Shift afterburner, 1–3 speed
+class (1×, 5×, 25×: up to about 68,000 km/h), C for chase, far chase and cockpit views, Esc to land. Banking turns the
+jet, the world's gravity costs speed in a climb, and touching the ground is a crash (a new jet appears after a moment).
+MapLibre 5 throws when asked for ground heights at zoom 18 or more with terrain on, so both cameras stay below that.
+
 ## Europa
 
 `?body=europa` (or the Europa button). Jupiter's moon has no public tile server, so `europa-tiles/` holds our own
