@@ -390,7 +390,7 @@ const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D
 // like a pinwheel. Fading the last few degrees into one average polar value turns that into a smooth cap.
 const POLE_FADE0 = GIANT ? 84 : 81.5, POLE_FADE1 = 85.05;   // gas giants: keep the polar detail (Juno's cyclones, Saturn's hexagon)
 // Mars basemaps with a sharp polar cap drawn on top (relief, Viking colour) keep their imagery up to 84°
-const MARS_CAPPED = k => MARS && (k === 'relief' || k === 'viking');
+const MARS_CAPPED = k => MARS && (k === 'relief' || k === 'viking' || k === 'classic');
 const fadeFor = bm => MARS_CAPPED(bm) ? 84 : POLE_FADE0;
 const poleWeight = (lat, f0 = POLE_FADE0) => { const t = (Math.abs(lat) - f0) / (POLE_FADE1 - f0); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
 const poleColorCache = {};
@@ -1212,12 +1212,46 @@ const MARS_POLAR = {
   viking: 'Mars_Viking_MDIM21_ClrMosaic_global_232m'
 };
 const POLAR_HALF = 1821000, POLAR_R = 3396190, CAP_FROM = 83.5, CAP_FULL = 84.5;
-function polarLayerFor(k) {          // only the colour (Viking) and relief (MOLA) basemaps get a polar cap
-  return k === 'relief' ? MARS_POLAR.relief : k === 'viking' ? MARS_POLAR.viking : null;
+function polarLayerFor(k) {          // the colour (Viking), relief (MOLA) and classic basemaps get a polar cap
+  return k === 'relief' ? MARS_POLAR.relief : k === 'viking' || k === 'classic' ? MARS_POLAR.viking : null;
+}
+// The classic 8k texture has its own colours, so its cap is the Viking polar mosaic recoloured to match it:
+// each colour channel's histogram over the 83–85° ring is mapped onto the classic texture's histogram over the same ring.
+async function recolourCap(cv, t, pole, bm) {
+  // the classic texture is plain Web Mercator tiles; zoom 2, top/bottom row, reaches 85.05°
+  const yy = pole > 0 ? 0 : 3, base = new URL('tiles/', location.href).href, ref = [[], [], []];
+  const imgs = await Promise.all([0, 1, 2, 3].map(x => fetch(`${base}2/${x}/${yy}.jpg`).then(r => r.ok ? r.blob() : null).then(b => b && createImageBitmap(b)).catch(() => null)));
+  for (const img of imgs) {
+    if (!img) continue;
+    const w = img.width, h = img.height, oc = new OffscreenCanvas(w, h), ox = oc.getContext('2d'); ox.drawImage(img, 0, 0);
+    const d = ox.getImageData(0, 0, w, h).data;
+    for (let y = 0; y < h; y++) {
+      const lat = Math.abs(tile2lat(yy + (y + 0.5) / h, 4));
+      if (lat < 83 || lat > 85) continue;
+      for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; for (let ch = 0; ch < 3; ch++) ref[ch].push(d[i + ch]); }
+    }
+  }
+  if (!ref[0].length) return;
+  const cx = cv.getContext('2d'), W = cv.width, img = cx.getImageData(0, 0, W, W), d = img.data, mpp = t.size / W;
+  const px0 = -t.x0 / mpp, py0 = -t.y0 / mpp, r1 = 2 * POLAR_R * Math.tan(5 * D2R / 2) / mpp, r2 = 2 * POLAR_R * Math.tan(7 * D2R / 2) / mpp;
+  const src = [[], [], []];
+  for (let y = 0; y < W; y += 2) for (let x = 0; x < W; x += 2) {
+    const r = Math.hypot(x - px0, y - py0), i = (y * W + x) * 4;
+    if (r >= r1 && r <= r2 && d[i + 3] > 0) for (let ch = 0; ch < 3; ch++) src[ch].push(d[i + ch]);
+  }
+  if (!src[0].length) return;
+  const cdf = a => { const hgm = new Float64Array(256); for (const v of a) hgm[v]++; let s = 0; for (let i = 0; i < 256; i++) { s += hgm[i]; hgm[i] = s / a.length; } return hgm; };
+  const lut = [0, 1, 2].map(ch => {
+    const cs = cdf(src[ch]), cr = cdf(ref[ch]), out = new Uint8Array(256); let j = 0;
+    for (let i = 0; i < 256; i++) { while (j < 255 && cr[j] < cs[i]) j++; out[i] = j; }
+    return out;
+  });
+  for (let i = 0; i < d.length; i += 4) { d[i] = lut[0][d[i]]; d[i + 1] = lut[1][d[i + 1]]; d[i + 2] = lut[2][d[i + 2]]; }
+  cx.putImageData(img, 0, 0);
 }
 const polarTex = new Map();         // key pole|layer|L -> { tex, ready, x0, y0, size }
-function polarTexture(gl, pole, layer, L) {
-  const key = pole + '|' + layer + '|' + L;
+function polarTexture(gl, pole, layer, L, matchTo) {
+  const key = pole + '|' + layer + '|' + L + '|' + (matchTo || '');
   let t = polarTex.get(key);
   if (t) return t;
   t = { ready: false, tex: gl.createTexture() };
@@ -1236,6 +1270,9 @@ function polarTexture(gl, pole, layer, L) {
   }
   Promise.all(jobs).then(() => {
     if (!got) { setTimeout(() => polarTex.delete(key), 8000); return; }   // server unreachable: try again later
+    return matchTo ? recolourCap(cv, t, pole, matchTo).catch(() => {}) : null;
+  }).then(() => {
+    if (!polarTex.has(key) || polarTex.get(key) !== t) return;
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
@@ -1310,7 +1347,7 @@ const marsCapLayer = {
       // pick the sharpest level that is loaded; ask for sharper ones only when zoomed in near this pole
       const want = [3]; if (z >= 2.5 && near < 45) want.push(4); if (z >= 4.5 && near < 22) want.push(5);
       let t = null;
-      for (const lv of want) { const tt = polarTexture(gl, pole, layer, lv); if (tt.ready) t = tt; }
+      for (const lv of want) { const tt = polarTexture(gl, pole, layer, lv, baseKey === 'classic' ? 'classic' : null); if (tt.ready) t = tt; }
       if (!t) continue;
       const h = terr && marsPoleH ? (pole > 0 ? marsPoleH.n : marsPoleH.s) + DEM_OFFSET : 0;
       const r = 1 + (terr ? h * (terr.exaggeration || 1) / 6371008.8 : 0);
