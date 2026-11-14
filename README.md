@@ -75,3 +75,17 @@ camera, horizon plane and frustum to match, so drawing, clicking, dragging and m
 Map latitudes on Jupiter are the ellipsoid's reduced latitude; labels and the coordinate read-out use
 planetographic latitude. Countries are placed with true geodesics on the ellipsoid (GeographicLib), and
 the measure tool measures along them. "Earth (whole planet, as a disc)" can be added there for scale.
+
+## Saturn (flattened globe with rings)
+
+`?body=saturn`. Planet map: Cassini ISS colour global map of 11 Aug 2011 (NASA PDS Atmospheres Node, *Cassini ISS
+Global Maps of Jupiter and Saturn*, Li et al., doi:10.17189/rkkb-6y30). The strips hidden by the rings' shadow and the
+poles are filled in from neighbouring latitudes. Tiles in `saturn-tiles/`, made with `tools/build_gasgiant_tiles.py
+--saturn --pia` (planetocentric source). Saturn is flattened even more than Jupiter (polar 54,364 km, equatorial
+60,268 km) and uses the same squashed-globe code.
+
+The rings are a WebGL custom layer in the globe's own coordinates. Their density is a real measurement: the normal
+optical depth from Cassini radio occultation Rev 7 (CORSS_8001, PDS Ring-Moon Systems Node), averaged to 100 km, so
+the C ring, B ring, Cassini Division, A ring and Encke Gap are where they really are; opacity is 1 − exp(−τ/μ), so
+they close up when seen edge-on. Colours per ring are approximate; the narrow F ring is added by hand. The far side
+is hidden behind the planet by a ray test against the (squashed) planet in the fragment shader.

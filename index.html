@@ -56,9 +56,6 @@
   .terr .exag.on{opacity:1;pointer-events:auto}
   .terr .exag input{flex:1;accent-color:var(--accent);min-width:60px}
   .terr .exag span{width:30px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
-  .basesel .mcol{display:none;align-items:center;gap:5px;color:var(--text);cursor:pointer;white-space:nowrap}
-  .basesel .mcol.on{display:flex}
-  .basesel .mcol input{accent-color:var(--accent);margin:0}
   .basesel select{flex:1;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:13px}
   .measure{position:absolute;z-index:15;left:50%;bottom:34px;transform:translateX(-50%);background:var(--panel,#1c1210);border:1px solid var(--accent);color:var(--text);padding:7px 8px 7px 14px;border-radius:9px;font-size:13px;display:none;align-items:center;gap:10px;max-width:92%;box-shadow:0 4px 16px rgba(0,0,0,.35)}
   .measure.on{display:flex}
@@ -143,7 +140,7 @@
   body.driving .panel,body.driving .maplibregl-ctrl-top-right,body.driving .coords,body.driving .measure,body.driving .feat,body.driving .site{display:none!important}
   .hud{display:none;position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--text);font-size:12.5px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:calc(100% - 20px)}
   body.driving .hud{display:block}
-  .hud{width:760px}
+  .hud{width:700px}
   .hud .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center}
   .hud .big{font:700 22px/1 'Space Grotesk',system-ui,sans-serif;min-width:92px;text-align:right}
   .hud .big small{font-size:11px;font-weight:500;color:var(--muted)}
@@ -158,27 +155,7 @@
   .pad{display:none;position:absolute;right:14px;bottom:120px;z-index:5;gap:6px;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,52px)}
   .pad button{border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:20px;touch-action:none;user-select:none;-webkit-user-select:none}
   .pad button:active,.pad button.on{background:var(--accent);color:#1a0f0b}
-  @media (pointer:coarse){ body.driving .pad,body.flying .pad{display:grid} body.driving .hud .keys,body.flying .jhud .keys{display:none} }
-  body.flying .panel,body.flying .maplibregl-ctrl-top-right,body.flying .coords,body.flying .measure,body.flying .feat,body.flying .site,body.flying .scale{display:none!important}
-  .jhud{display:none;position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:5;width:800px;max-width:calc(100% - 20px);background:rgba(8,14,12,.78);border:1px solid rgba(120,255,170,.25);border-radius:12px;padding:10px 14px;color:#b8ffd0;font:12.5px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 6px 24px rgba(0,0,0,.5)}
-  body.flying .jhud{display:block}
-  .jhud .row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center}
-  .jhud .big{font-size:24px;font-weight:700;min-width:120px;text-align:right}
-  .jhud .big small{font-size:11px;font-weight:400;opacity:.7}
-  .jhud .lbl{opacity:.65}
-  .jhud .thr{width:90px;height:8px;border:1px solid rgba(120,255,170,.5);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle}
-  .jhud .thr i{display:block;height:100%;background:#7dffad}
-  .jhud .thr.ab i{background:#ff9a3c}
-  .jhud .sz{display:flex;border:1px solid rgba(120,255,170,.3);border-radius:999px;overflow:hidden}
-  .jhud .sz button{background:none;border:0;color:#b8ffd0;opacity:.7;font:inherit;padding:4px 8px;cursor:pointer}
-  .jhud .sz button.on{background:#7dffad;color:#06110b;opacity:1}
-  .jhud .exit{background:none;border:1px solid rgba(120,255,170,.4);color:#b8ffd0;border-radius:8px;padding:5px 10px;font:inherit;cursor:pointer}
-  .jhud .keys{margin-top:7px;text-align:center;opacity:.7;font-size:11px}
-  .jhud kbd{border:1px solid rgba(120,255,170,.35);border-radius:4px;padding:0 4px;font:inherit}
-  .pullup{display:none;position:absolute;left:50%;top:22%;transform:translateX(-50%);z-index:6;color:#ff4d3d;font:800 40px/1 ui-monospace,Menlo,monospace;letter-spacing:4px;text-shadow:0 0 12px rgba(255,60,40,.7);animation:blink .5s steps(2) infinite;pointer-events:none}
-  body.flying .pullup.on{display:block}
-  @keyframes blink{50%{opacity:0}}
-  .drivebtn+.drivebtn{margin-top:-4px}
+  @media (pointer:coarse){ body.driving .pad{display:grid} body.driving .hud .keys{display:none} }
 </style>
 </head>
 <body>
@@ -186,10 +163,10 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>True Size of <span id="bodyName">Mars</span></h1>
-    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button></div>
+    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button><button type="button" data-b="saturn">Saturn</button></div>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
-  <div class="basesel"><label for="base">Basemap</label><select id="base"></select><label class="mcol" id="mcolWrap" title="The CTX, THEMIS and HiRISE images are black and white; this colours them from the Viking colour mosaic"><input type="checkbox" id="tColour"> Colour</label></div>
+  <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
   <div class="terr hir">
     <label class="tog"><input type="checkbox" id="tHirise" checked> HiRISE detail</label>
     <select id="site"><option value="">Fly to a landing site…</option></select>
@@ -198,8 +175,8 @@
     <label class="tog"><input type="checkbox" id="tTerrain"> 3D terrain</label>
     <label class="exag" id="exagWrap" title="Vertical exaggeration. 1× = true proportions">Height <input type="range" id="exag" min="1" max="10" step="0.5" value="1"><span id="exagVal">1×</span></label>
   </div>
+  <button type="button" class="drivebtn" id="ringBtn" title="Fly to a view where the rings are open">&#129680; View the rings</button>
   <button type="button" class="drivebtn" id="driveBtn" title="Drive a lunar roving vehicle over the 3D terrain">&#128665; Drive the moon buggy</button>
-  <button type="button" class="drivebtn" id="flyBtn" title="Fly a fighter jet low and fast over the 3D terrain">&#9992;&#65039; Fly a fighter jet</button>
   <div class="search">
     <input id="q" type="text" placeholder="Add a country, province or continent…" autocomplete="off" spellcheck="false">
     <div class="sugg" id="sugg"></div>
@@ -221,24 +198,10 @@
     <div class="stat">Heading <b id="hHead">N</b></div>
     <div class="stat" id="hPos"></div>
     <div class="sz" id="hSize" title="How big the buggy is drawn (speeds and gravity scale with it)"><button type="button" data-s="1">Real size</button><button type="button" data-s="10">10&times;</button><button type="button" data-s="40">40&times;</button></div>
-    <div class="sz" id="hSpeedSel" title="Top speed (keys 1–4). Shift boosts 3× on top"><button type="button" data-m="1">Speed 1&times;</button><button type="button" data-m="4">4&times;</button><button type="button" data-m="15">15&times;</button><button type="button" data-m="50">50&times;</button></div>
     <button type="button" class="exit" id="hExit">Stop driving</button>
   </div>
-  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
+  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
 </div>
-<div class="jhud" id="jhud" role="region" aria-label="Fighter jet">
-  <div class="row">
-    <div class="big" id="jSpeed">0 <small>km/h</small></div>
-    <div><span class="lbl">ALT</span> <b id="jAlt">0</b></div>
-    <div><span class="lbl">HDG</span> <b id="jHdg">000</b></div>
-    <div><span class="lbl">THR</span> <span class="thr" id="jThrBox"><i id="jThr"></i></span></div>
-    <div class="sz" id="jSpeedSel" title="Speed class (keys 1–3)"><button type="button" data-m="1">1&times;</button><button type="button" data-m="5">5&times;</button><button type="button" data-m="25">25&times;</button></div>
-    <button type="button" class="exit" id="jInv" title="Swap what up and down do">&uarr;&darr;: <span id="jInvT">stick</span></button>
-    <button type="button" class="exit" id="jExit">Land (Esc)</button>
-  </div>
-  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> pitch &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> roll &middot; <kbd>A</kbd><kbd>D</kbd> rudder &middot; <kbd>W</kbd><kbd>S</kbd> throttle &middot; <kbd>Shift</kbd> afterburner &middot; <kbd>1</kbd>–<kbd>3</kbd> speed class &middot; <kbd>C</kbd> camera &middot; <kbd>Esc</kbd> land</div>
-</div>
-<div class="pullup" id="pullup">PULL UP</div>
 <div class="pad" id="pad"><span></span><button type="button" data-k="up">&#9650;</button><button type="button" data-k="hop">&#11014;</button><button type="button" data-k="left">&#9664;</button><button type="button" data-k="down">&#9660;</button><button type="button" data-k="right">&#9654;</button></div>
 <div class="coords" id="coords"></div>
 <div class="toast" id="toast"></div>
@@ -266,21 +229,22 @@ const TOPO = {"type":"Topology","objects":{"countries":{"type":"GeometryCollecti
 // ?body=moon / ?body=mars picks one; otherwise the last one this browser used (Mars for new visitors).
 const BODY = (() => {
   const q = new URLSearchParams(location.search).get('body');
-  const ok = b => b === 'mars' || b === 'moon' || b === 'europa' || b === 'jupiter';
+  const ok = b => b === 'mars' || b === 'moon' || b === 'europa' || b === 'jupiter' || b === 'saturn';
   if (ok(q)) return q;
   try { const b = localStorage.getItem('truesize-body'); return ok(b) ? b : 'mars'; } catch (e) { return 'mars'; }
 })();
 try { localStorage.setItem('truesize-body', BODY); } catch (e) {}
-const MOON = BODY === 'moon', EUROPA = BODY === 'europa', MARS = BODY === 'mars', JUPITER = BODY === 'jupiter';
-const BODY_SHORT = MOON ? 'Moon' : EUROPA ? 'Europa' : JUPITER ? 'Jupiter' : 'Mars';
+const MOON = BODY === 'moon', EUROPA = BODY === 'europa', MARS = BODY === 'mars', JUPITER = BODY === 'jupiter', SATURN = BODY === 'saturn';
+const GIANT = JUPITER || SATURN;      // gas giants: flattened globe, no surface
+const BODY_SHORT = MOON ? 'Moon' : EUROPA ? 'Europa' : JUPITER ? 'Jupiter' : SATURN ? 'Saturn' : 'Mars';
 const BODY_NAME = MOON ? 'the Moon' : BODY_SHORT, BODY_THE = BODY_NAME;
-const HAS_TERRAIN = !EUROPA && !JUPITER;   // no global height map of Europa; Jupiter has no surface
-// Jupiter is drawn as a flattened globe (see installEllipsoid). Map latitudes there are the ellipsoid's
+const HAS_TERRAIN = !EUROPA && !GIANT;     // no global height map of Europa; gas giants have no surface
+// Jupiter and Saturn are drawn as flattened globes (see installEllipsoid). Map latitudes there are the ellipsoid's
 // *reduced* latitude beta; everything shown to people uses planetographic latitude phi: tan(beta) = Q tan(phi).
-const J_A = 71492, J_B = 66854, Q = JUPITER ? J_B / J_A : 1;
+const J_A = SATURN ? 60268 : 71492, J_B = SATURN ? 54364 : 66854, Q = GIANT ? J_B / J_A : 1;
 const toMapLat = phi => Math.atan(Q * Math.tan(phi * D2R)) * R2D;          // planetographic -> map
 const fromMapLat = beta => Math.atan(Math.tan(beta * D2R) / Q) * R2D;      // map -> planetographic
-const GEOD = JUPITER && window.geodesic ? new geodesic.Geodesic.Geodesic(J_A, 1 - Q) : null;
+const GEOD = GIANT && window.geodesic ? new geodesic.Geodesic.Geodesic(J_A, 1 - Q) : null;
 document.title = 'True Size of ' + BODY_NAME;
 document.getElementById('bodyName').textContent = BODY_SHORT;
 if (MOON) document.getElementById('bodyName').before('the ');
@@ -290,16 +254,17 @@ document.querySelectorAll('#bodysw button').forEach(b => {
 });
 if (MOON) { const tl = document.getElementById('trekLink'); tl.href = 'https://trek.nasa.gov/moon/'; tl.textContent = 'NASA Moon Trek'; }
 if (JUPITER) { const tl = document.getElementById('trekLink'); tl.href = 'https://www.planetary.org/space-images/merged-cassini-and-juno'; tl.textContent = 'The Planetary Society'; tl.previousSibling.textContent = ' · map via '; }
+if (SATURN) { const tl = document.getElementById('trekLink'); tl.href = 'https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/Cassini/sat_global_map.html'; tl.textContent = 'NASA PDS Atmospheres'; tl.previousSibling.textContent = ' · map via '; }
 if (EUROPA) { const tl = document.getElementById('trekLink'); tl.href = 'https://astrogeology.usgs.gov/search/map/europa_voyager_galileo_ssi_global_mosaic_500m'; tl.textContent = 'USGS Astrogeology'; tl.previousSibling.textContent = ' · map via '; }
 
-const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : JUPITER ? J_A : 3389.5;
+const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : GIANT ? J_A : 3389.5;
 const K = R_EARTH / R_BODY;
-const BODY_AREA = JUPITER   // surface of an oblate ellipsoid
+const BODY_AREA = GIANT   // surface of an oblate ellipsoid
   ? (() => { const e = Math.sqrt(1 - Q * Q); return 2 * Math.PI * J_A * J_A * (1 + (Q * Q / e) * Math.atanh(e)); })()
   : 4 * Math.PI * R_BODY * R_BODY;
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const PALETTE = ['#4cc9f0','#b8f24c','#f72585','#ffd166','#7b6cff','#2ee6a8','#ff9f1c','#e0e0ff','#ff5d73','#00b4d8'];
-const KEY = MOON ? 'moon-truesize-v1' : EUROPA ? 'europa-truesize-v1' : JUPITER ? 'jupiter-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
+const KEY = MOON ? 'moon-truesize-v1' : EUROPA ? 'europa-truesize-v1' : JUPITER ? 'jupiter-truesize-v1' : SATURN ? 'saturn-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
 
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
@@ -337,18 +302,25 @@ const JUPITER_BASEMAPS = {
     url: (z, r, c) => new URL(`jupiter-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Map: NASA/JPL-Caltech/SSI/SwRI/MSSS/ASI/INAF/JIRAM/Björn Jónsson, CC BY 3.0' }
 };
-const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : {
+// Saturn: Cassini's colour global map of 11 Aug 2011 (NASA PDS Atmospheres node, Li et al.), with the strips hidden by
+// the rings and the poles filled in from neighbouring latitudes, resampled and cut into saturn-tiles/.
+const SATURN_BASEMAPS = {
+  cassini: { label: 'Cassini colour (Aug 2011)', ts: 256, max: 3, out: 'image/jpeg', bg: '#d9c19a',
+    url: (z, r, c) => new URL(`saturn-tiles/${z}/${r}/${c}.jpg`, location.href).href,
+    credit: 'Cassini ISS colour map, 11 Aug 2011: NASA/JPL-Caltech/SSI, L. Li et al. (PDS) · ring profile: Cassini RSS (PDS Rings)' }
+};
+const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : SATURN ? SATURN_BASEMAPS : {
   viking: { label: 'Colour (Viking)', ts: 256, max: 7, out: 'image/jpeg', bg: '#6b3b26',
     url: (z, r, c) => `${TREK}Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/${z}/${r}/${c}.jpg`,
     credit: 'Viking MDIM 2.1 colour mosaic, 232 m: NASA/JPL/USGS' },
   relief: { label: 'Relief (MOLA/HRSC)', ts: 256, max: 8, out: 'image/jpeg', bg: '#334',
     url: (z, r, c) => `${TREK}Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw/1.0.0/default/default028mm/${z}/${r}/${c}.jpg`,
     credit: 'MOLA/HRSC blended colour shaded relief, 200 m: NASA/JPL/GSFC/ESA/DLR/FU Berlin/USGS' },
-  themis: { label: 'Infrared (THEMIS)', ts: 256, max: 9, out: 'image/webp', grey: true,
+  themis: { label: 'Infrared (THEMIS)', ts: 256, max: 9, out: 'image/webp',
     url: (z, r, c) => `${TREK}THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018/1.0.0/default/default028mm/${z}/${r}/${c}.png`,
     credit: 'THEMIS day IR controlled mosaic, 100 m (±65°): NASA/JPL/ASU/USGS' },
   // The CTX mosaic is a preliminary one with gaps between image strips, so THEMIS is drawn underneath it.
-  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555', under: 'themis', grey: true,
+  ctx: { label: 'Detail (CTX 5 m)', ts: 512, max: 12, out: 'image/webp', bg: '#555', under: 'themis',
     url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
     credit: 'Global CTX mosaic: NASA/JPL/MSSS/Caltech Murray Lab/Esri' },
   classic: { label: 'Classic (8k texture)', local: true,
@@ -357,7 +329,7 @@ const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUP
 // HiRISE: every published HiRISE image (~25 cm/px) in one uncontrolled mosaic, served by Esri.
 // Covers only a few percent of Mars, so it's an overlay that fades in when zoomed in; gaps stay transparent.
 const OVERLAYS = {
-  hirise: { ts: 512, max: 17, out: 'image/webp', grey: true,
+  hirise: { ts: 512, max: 17, out: 'image/webp',
     url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/HiRISE/MapServer/tile/${z}/${r}/${c}`,
     credit: 'HiRISE: NASA/JPL/University of Arizona/USGS/Esri' }
 };
@@ -400,49 +372,9 @@ function poleColor(bm) {        // -> Promise<{n:'rgb()', s:'rgb()'}|null>, aver
   }).catch(() => null));
 }
 const failures = {};
-// The CTX, THEMIS and HiRISE images are black and white. With "Mars colour" on, each of their tiles takes its
-// colour from the same spot in the Viking colour mosaic (232 m) and keeps its own detail as brightness
-// (a ratio "pan-sharpen"). Where Viking can't be reached, a plain Mars colour ramp is used instead.
-let marsColour = !(saved && saved.colour === false);
-const lum = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-const RAMP = [[0, [26, 15, 10]], [0.45, [146, 88, 55]], [0.75, [205, 150, 105]], [1, [240, 205, 170]]];
-function rampColour(t) {
-  for (let i = 1; i < RAMP.length; i++) if (t <= RAMP[i][0]) {
-    const [t0, a] = RAMP[i - 1], [t1, b] = RAMP[i], f = (t - t0) / (t1 - t0);
-    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
-  }
-  return RAMP[RAMP.length - 1][1];
-}
-function tintGrey(out, ref) {
-  const W = out.width, octx = out.getContext('2d'), img = octx.getImageData(0, 0, W, W), d = img.data;
-  const rd = ref ? ref.getContext('2d').getImageData(0, 0, W, W).data : null;
-  // match the tile's overall brightness to Viking's, so the colour mosaic's tone carries over
-  let sd = 0, sc = 0, cnt = 0;
-  if (rd) for (let i = 0; i < d.length; i += 32) if (d[i + 3] > 0 && rd[i + 3] > 0) { sd += lum(d, i); sc += lum(rd, i); cnt++; }
-  const useRef = rd && cnt > 50 && sc / cnt > 4;
-  const gain = useRef ? Math.min(2, Math.max(0.5, sc / Math.max(1, sd))) : 1;
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] === 0) continue;
-    const y = lum(d, i);
-    if (useRef && rd[i + 3] > 0) {
-      const k = Math.min(3.5, Math.max(0.15, y * gain / Math.max(6, lum(rd, i))));
-      d[i] = Math.min(255, rd[i] * k); d[i + 1] = Math.min(255, rd[i + 1] * k); d[i + 2] = Math.min(255, rd[i + 2] * k);
-    } else {
-      const c = rampColour(y / 255); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2];
-    }
-  }
-  octx.putImageData(img, 0, 0);
-}
 maplibregl.addProtocol('eq', async params => {
-  const [bm, zs_, xs, ysq] = params.url.replace('eq://', '').split('/'), ys = ysq.split('?')[0];
-  const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys;
-  const out = await renderEq(bm, z, x, y);
-  if (MARS && B.grey && /[?&]c=1/.test(params.url)) tintGrey(out, await renderEq('viking', z, x, y, true).catch(() => null));
-  const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
-  return { data: await blob.arrayBuffer() };
-});
-async function renderEq(bm, z, x, y, isRef) {
-  const B = LAYERDEF(bm), n = 2 ** z;
+  const [bm, zs_, xs, ys] = params.url.replace('eq://', '').split('/');
+  const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys, n = 2 ** z;
   const lon0 = x / n * 360 - 180, lonSpan = 360 / n;
   const latN = tile2lat(y, n), latS = tile2lat(y + 1, n);
   // pick the source level whose pixel size matches; boost a little towards the poles (Mercator stretch)
@@ -458,8 +390,8 @@ async function renderEq(bm, z, x, y, isRef) {
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++)
     jobs.push(getSrc(bm, zs, r, ((c % cols) + cols) % cols).then(img => { if (img) ictx.drawImage(img, (c - c0) * ts, (r - r0) * ts); return !!img; }));
   const ok = (await Promise.all(jobs)).filter(Boolean).length;
-  if (isRef && !ok) return null;
-  if (!isRef) { failures[bm] = ok ? 0 : (failures[bm] || 0) + 1; if (failures[bm] > 8) maybeFallback(bm); }
+  failures[bm] = ok ? 0 : (failures[bm] || 0) + 1;
+  if (failures[bm] > 8) maybeFallback(bm);
   const out = new OffscreenCanvas(512, 512), octx = out.getContext('2d');
   if (B.bg && B.out === 'image/jpeg') { octx.fillStyle = B.bg; octx.fillRect(0, 0, 512, 512); }
   const sx = ((lon0 + 180) / span - c0) * ts, sw = lonSpan / span * ts;
@@ -476,9 +408,10 @@ async function renderEq(bm, z, x, y, isRef) {
     }
     octx.globalAlpha = 1;
   }
-  return out;
-}
-const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : JUPITER ? 'cassini' : 'relief';
+  const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
+  return { data: await blob.arrayBuffer() };
+});
+const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : GIANT ? 'cassini' : 'relief';
 // the visitor's chosen basemap, read up front so an early fallback can never overwrite it
 let wantedBase = (saved && saved.v >= 3 && BASEMAPS[saved.base] && saved.base) || DEFAULT_BASE;
 let baseKey = wantedBase, fellBack = false;
@@ -588,14 +521,13 @@ maplibregl.addProtocol('dem', async params => {
   return { data: await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer() };
 });
 
-const eqUrl = k => `eq://${k}/{z}/{x}/{y}` + (LAYERDEF(k).grey && MARS ? `?c=${marsColour ? 1 : 0}` : '');
 const baseSources = {
-  'ov-hirise': { type: 'raster', tiles: [eqUrl('hirise')], tileSize: 512, minzoom: 11, maxzoom: 18 }
+  'ov-hirise': { type: 'raster', tiles: ['eq://hirise/{z}/{x}/{y}'], tileSize: 512, minzoom: 11, maxzoom: 18 }
 }, baseLayers = [];
 for (const [k, B] of Object.entries(BASEMAPS)) {
   baseSources['base-' + k] = B.local
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
-    : { type: 'raster', tiles: [eqUrl(k)], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
+    : { type: 'raster', tiles: [`eq://${k}/{z}/{x}/{y}`], tileSize: 512, minzoom: 0, maxzoom: B.ts === 512 ? B.max + 1 : B.max + 1 };
   baseLayers.push({ id: 'base-' + k, type: 'raster', source: 'base-' + k,
     layout: { visibility: k === wantedBase || k === BASEMAPS[wantedBase].under ? 'visible' : 'none' },
     paint: { 'raster-fade-duration': 200, 'raster-resampling': 'linear' } });
@@ -605,7 +537,7 @@ const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
   center: [-62, 0], zoom: startProj === 'globe' ? 1.6 : 2,
-  minZoom: 0.5, maxZoom: EUROPA ? 9 : JUPITER ? 10 : 18, renderWorldCopies: true, maxPitch: 80,
+  minZoom: 0.5, maxZoom: EUROPA ? 9 : GIANT ? 10 : 18, renderWorldCopies: true, maxPitch: 80,
   style: {
     version: 8,
     projection: { type: startProj },
@@ -722,7 +654,7 @@ function installEllipsoid(q) {
   }
   return true;
 }
-if (JUPITER) {
+if (GIANT) {
   // the globe transform only exists once the style (and its projection) is in place
   const tryInstall = () => { if (installEllipsoid(Q)) { map.off('styledata', tryInstall); map.jumpTo({ center: map.getCenter() }); } };
   map.on('styledata', tryInstall); tryInstall();
@@ -775,7 +707,11 @@ function updateScale() {
 map.on('move', updateScale);
 
 // landmarks
-const FEATURES = JUPITER ? [
+const FEATURES = SATURN ? [
+  ['North polar hexagon', 78, 0], ['South polar vortex', -88, 0],
+  ['Great storm of 2010–11 (its band)', 33, -40], ['Equatorial Zone', 0, 60], ['South Equatorial Belt', -20, 60],
+  ['North Equatorial Belt', 18, 120]
+].map(([n, phi, lo]) => [n, toMapLat(phi), lo]) : JUPITER ? [
   ['Great Red Spot', -22, -53], ['Equatorial Zone', 0, 110], ['North Equatorial Belt', 14, 110],
   ['South Equatorial Belt', -15, 110], ['North Tropical Zone', 20, 150], ['South Tropical Zone', -25, 150],
   ['North Temperate Belt', 27, -150], ['South Temperate Belt', -30, -150], ['North Polar Region', 62, 30],
@@ -800,7 +736,7 @@ const FEATURES = JUPITER ? [
   ['Amazonis Planitia', 24.8, -163.6], ['Terra Cimmeria', -32.7, 145], ['Noachis Terra', -45, -5],
   ['Planum Boreum', 84, 0], ['Planum Australe', -84, 160], ['Vastitas Borealis', 67, -150]
 ];
-const SITES = EUROPA || JUPITER ? [] : MOON ? [
+const SITES = EUROPA || GIANT ? [] : MOON ? [
   ['Apollo 11', 0.674, 23.473], ['Apollo 12', -3.012, -23.422], ['Apollo 14', -3.645, -17.471],
   ['Apollo 15', 26.132, 3.634], ['Apollo 16', -8.973, 15.501], ['Apollo 17', 20.191, 30.772],
   ['Luna 9', 7.08, -64.37], ['Luna 17 · Lunokhod 1', 38.24, -35.0], ['Surveyor 1', -2.47, -43.34],
@@ -827,7 +763,7 @@ const COUNTRIES = fc.features.filter(f => f.geometry && f.properties && f.proper
   .map(f => ({ key: f.properties.name, name: f.properties.name, kind: 'Country', feature: f, area: d3.geoArea(f) * R_EARTH * R_EARTH }))
   .sort((a, b) => a.name.localeCompare(b.name));
 // On Jupiter you can also add the whole Earth: a disc with Earth's radius (6,371 km) measured along the surface.
-if (JUPITER) COUNTRIES.unshift({ key: 'earth', name: 'Earth (whole planet, as a disc)', kind: 'Planet',
+if (GIANT) COUNTRIES.unshift({ key: 'earth', name: 'Earth (whole planet, as a disc)', kind: 'Planet',
   feature: { type: 'Feature', properties: {}, geometry: d3.geoCircle().center([0, 0]).radius(R2D).precision(2)() }, area: Math.PI * R_EARTH * R_EARTH });
 const SHAPES = COUNTRIES.slice();                       // countries now, provinces once loaded
 const byKey = new Map(COUNTRIES.map(c => [c.key, c]));
@@ -1020,6 +956,107 @@ function refresh() {
   if (typeof cullLabels === 'function' && map.loaded()) cullLabels();
 }
 
+// ---------- Saturn's rings ----------
+// A flat disc in Saturn's equatorial plane, drawn with plain WebGL in a MapLibre custom layer, in the same
+// coordinates as the (squashed) globe: there the planet is a unit sphere and the ring plane is y = 0, with radii in
+// equatorial radii (60,268 km). How dense the rings are comes from a real measurement: the normal optical depth
+// ("tau") from a Cassini radio occultation (RSS, Rev 7, 2005), in 100 km steps from 74,500 to 137,700 km
+// (PDS Ring-Moon Systems Node), here x100. Opacity follows 1 - exp(-tau / mu), mu = how steeply you look at the ring,
+// so the rings turn opaque when seen edge-on. Colours are approximate per ring (C, B, Cassini Division, A). The thin
+// F ring is added by hand. Parts behind the planet are hidden by a ray test against the planet in the fragment shader.
+const RING_TAU_R0 = 74500, RING_TAU_STEP = 100;
+const RING_TAU = '9 6 9 5 10 11 6 5 5 5 5 5 4 5 12 18 16 27 15 12 7 5 5 8 9 17 28 17 12 19 12 7 5 0 77 14 15 15 17 14 11 12 14 13 15 15 16 36 23 14 13 14 17 18 19 19 19 18 17 18 19 21 21 22 21 20 18 17 17 18 21 22 23 23 23 31 26 20 18 18 20 21 23 25 26 26 25 23 21 20 18 16 15 17 18 20 20 20 19 19 18 17 18 88 85 15 16 17 16 16 14 14 52 13 24 27 13 14 15 74 79 43 9 9 12 10 12 21 25 0 94 6 8 10 9 10 12 12 17 45 47 30 27 10 10 10 11 37 27 11 9 9 10 43 63 14 30 61 11 36 69 52 14 16 18 20 23 24 27 30 31 33 35 37 38 73 201 247 251 262 282 256 239 177 205 198 179 159 148 156 132 137 158 171 163 139 138 190 157 162 119 121 122 123 123 122 121 124 121 157 164 150 148 144 150 139 149 134 130 134 160 198 190 136 136 128 126 134 135 137 143 136 151 132 143 136 148 166 138 147 148 135 177 159 210 249 351 222 383 244 185 291 256 307 295 241 439 434 455 382 448 450 446 454 445 334 369 305 444 263 328 158 186 440 274 422 385 304 253 278 186 248 241 205 427 311 207 195 289 259 224 435 226 377 456 281 339 449 451 397 450 445 391 450 459 448 448 449 447 449 416 418 441 446 440 447 447 448 441 409 381 447 448 446 444 449 440 456 448 446 434 448 433 451 449 446 366 387 394 419 443 425 422 447 445 429 397 423 413 448 442 432 423 434 420 398 445 431 398 339 288 265 322 329 299 303 358 406 387 294 340 298 293 306 261 245 290 311 365 335 338 236 337 321 257 333 352 290 240 310 262 227 244 304 255 313 276 213 288 273 240 250 233 262 303 307 345 322 223 300 370 390 360 336 282 306 306 321 368 411 322 192 204 230 185 270 114 84 111 80 95 148 0 40 7 22 20 20 13 15 16 9 15 15 9 14 16 19 17 9 7 8 7 6 0 12 50 14 23 11 28 69 70 70 19 19 21 23 27 28 29 31 32 35 37 39 79 87 104 162 154 157 156 146 128 130 126 102 106 135 149 158 156 121 122 104 100 100 119 101 95 91 91 90 84 82 81 82 94 97 80 80 78 80 83 87 78 78 78 78 78 76 76 75 75 75 73 74 73 73 72 72 75 71 72 72 71 69 69 69 70 69 67 67 68 68 66 66 66 67 65 65 66 66 64 68 67 67 67 68 73 73 89 99 74 73 70 66 66 65 65 67 66 119 86 69 71 74 86 100 75 74 72 71 69 68 72 73 73 54 0 0 4 91 88 86 94 99 140 98 93 93 89 87 86 86 84 85 86 88 88 96 89 93 87 90 90 94 95 96 62 118 127 32 0 0 0 0 1 0 0 0 0'.split(' ').map(v => +v / 100);
+const RING_IN = 74500 / 60268, RING_OUT = 141000 / 60268;
+let ringsOn = SATURN;
+function ringTexture() {
+  // 1D texture, 1 texel per 50 km from RING_IN to RING_OUT: rgb = colour (already scaled by brightness), a = tau / 6
+  const n = Math.round((RING_OUT - RING_IN) * 60268 / 50), px = new Uint8Array(n * 4);
+  const col = r => r < 92000 ? [0.62, 0.56, 0.49] : r < 117580 ? [0.93, 0.82, 0.66] : r < 122170 ? [0.66, 0.63, 0.58] : [0.84, 0.78, 0.68];
+  for (let i = 0; i < n; i++) {
+    const r = RING_IN * 60268 + (i + 0.5) * 50;
+    let tau = 0;
+    const f = (r - RING_TAU_R0) / RING_TAU_STEP;
+    if (f >= 0 && f <= RING_TAU.length - 1) { const k = Math.floor(f), t = f - k; tau = RING_TAU[k] * (1 - t) + (RING_TAU[Math.min(k + 1, RING_TAU.length - 1)] || 0) * t; }
+    if (Math.abs(r - 140220) < 60) tau = Math.max(tau, 0.5 * (1 - Math.abs(r - 140220) / 60));    // F ring
+    const c = col(r), b = 0.35 + 0.65 * (1 - Math.exp(-tau * 1.2));
+    px[i * 4] = c[0] * b * 255; px[i * 4 + 1] = c[1] * b * 255; px[i * 4 + 2] = c[2] * b * 255; px[i * 4 + 3] = Math.min(255, tau / 6 * 255);
+  }
+  return { n, px };
+}
+const ringLayer = {
+  id: 'saturn-rings', type: 'custom', renderingMode: '2d',
+  onAdd(m, gl) {
+    const vs = `
+      attribute vec2 a_pos;          // (angle, radius in equatorial radii)
+      uniform mat4 u_matrix;
+      varying vec3 v_p;
+      void main() {
+        vec3 p = vec3(sin(a_pos.x) * a_pos.y, 0.0, cos(a_pos.x) * a_pos.y);
+        v_p = p;
+        gl_Position = u_matrix * vec4(p, 1.0);
+        gl_Position.z = 0.0;           // no depth test; keep the far side of the rings inside the far plane
+      }`;
+    const fs = `
+      precision highp float;
+      varying vec3 v_p;
+      uniform sampler2D u_tex;
+      uniform vec3 u_cam;            // camera in the squashed globe's own coordinates (planet = unit sphere)
+      uniform float u_q, u_rin, u_rout, u_fade;
+      void main() {
+        float r = length(v_p.xz);
+        if (r < u_rin || r > u_rout) discard;
+        vec4 t = texture2D(u_tex, vec2((r - u_rin) / (u_rout - u_rin), 0.5));
+        float tau = t.a * 6.0;
+        if (tau < 0.003) discard;
+        // hidden behind the planet? (segment from the ring point to the camera hits the unit sphere)
+        vec3 d = u_cam - v_p; float L = length(d); vec3 dir = d / L;
+        float b = dot(v_p, dir), c = dot(v_p, v_p) - 1.0, h = b * b - c;
+        if (h > 0.0) { float s = -b - sqrt(h); if (s > 0.0 && s < L) discard; }
+        vec3 dw = vec3(d.x, d.y * u_q, d.z);              // the same direction in real (unsquashed) space
+        float mu = max(abs(dw.y) / length(dw), 0.02);
+        float a = (1.0 - exp(-tau / mu)) * u_fade;
+        gl_FragColor = vec4(t.rgb * a, a);
+      }`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(o)); return o; };
+    const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+    this.prog = prog;
+    const N = 720, v = [];                       // triangle strip around the ring
+    for (let i = 0; i <= N; i++) { const a = i / N * Math.PI * 2; v.push(a, RING_IN, a, RING_OUT); }
+    this.count = (N + 1) * 2;
+    this.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    const { n, px } = ringTexture();
+    this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), m: gl.getUniformLocation(prog, 'u_matrix'), tex: gl.getUniformLocation(prog, 'u_tex'),
+      cam: gl.getUniformLocation(prog, 'u_cam'), q: gl.getUniformLocation(prog, 'u_q'), rin: gl.getUniformLocation(prog, 'u_rin'),
+      rout: gl.getUniformLocation(prog, 'u_rout'), fade: gl.getUniformLocation(prog, 'u_fade') };
+  },
+  render(gl, args) {
+    const tr = map.transform, vp = tr && tr._verticalPerspectiveTransform;
+    if (!ringsOn || !vp || !(tr._globeness > 0.5)) return;      // only on the globe (not the flat map, not fully zoomed in)
+    const L = this.loc;
+    gl.useProgram(this.prog);
+    gl.uniformMatrix4fv(L.m, false, args.defaultProjectionData.mainMatrix);
+    const c = vp._cameraPosition; gl.uniform3f(L.cam, c[0], c[1], c[2]);
+    gl.uniform1f(L.q, Q); gl.uniform1f(L.rin, RING_IN); gl.uniform1f(L.rout, RING_OUT);
+    gl.uniform1f(L.fade, Math.min(1, (tr._globeness - 0.5) * 2));
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex); gl.uniform1i(L.tex, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(L.pos); gl.vertexAttribPointer(L.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
+  }
+};
+if (SATURN) {
+  map.on('load', () => { if (!map.getLayer('saturn-rings')) map.addLayer(ringLayer); });
+  const rb = document.getElementById('ringBtn'); rb.style.display = 'block';
+  // the camera always looks at a point on the planet: from mid-latitudes you look down onto the open rings
+  rb.onclick = () => map.flyTo({ center: [map.getCenter().lng, toMapLat(28)], zoom: innerWidth < 640 ? 0.5 : 0.85, pitch: 0, bearing: 0, duration: 2500, essential: true });
+}
+
 // ---------- hover + drag ----------
 const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, className: 'tt', offset: 14, maxWidth: '260px' });
 let drag = null, raf = 0, pending = null;
@@ -1178,7 +1215,7 @@ document.getElementById('clear').onclick = () => { while (placed.length) removeC
 
 const coords = document.getElementById('coords');
 map.on('mousemove', e => {
-  const lon = wrapLon(e.lngLat.lng), lat = JUPITER ? fromMapLat(e.lngLat.lat) : e.lngLat.lat;
+  const lon = wrapLon(e.lngLat.lng), lat = GIANT ? fromMapLat(e.lngLat.lat) : e.lngLat.lat;
   coords.textContent = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}  ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
 });
 
@@ -1190,25 +1227,10 @@ function setBase(k, auto) {
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
   for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k || kk === BASEMAPS[k].under ? 'visible' : 'none');
-  updateCredit(); if (typeof syncColourToggle === 'function') syncColourToggle();
+  updateCredit();
   save();
 }
 baseSel.onchange = () => setBase(baseSel.value);
-// "Colour" shows on Mars when a black-and-white layer is in view (CTX, THEMIS, or the HiRISE overlay)
-const tColour = document.getElementById('tColour'), mcolWrap = document.getElementById('mcolWrap');
-tColour.checked = marsColour;
-function syncColourToggle() {
-  let hir = false; try { hir = showHirise; } catch (e) {}
-  document.getElementById('mcolWrap').classList.toggle('on', MARS && (!!BASEMAPS[baseKey]?.grey || hir));
-}
-tColour.onchange = () => {
-  marsColour = tColour.checked;
-  for (const k of [...Object.keys(BASEMAPS), 'hirise']) {
-    const id = k === 'hirise' ? 'ov-hirise' : 'base-' + k, src = map.getSource(id);
-    if (LAYERDEF(k).grey && src && src.setTiles) src.setTiles([eqUrl(k)]);
-  }
-  save();
-};
 
 // ---------- hide labels that are over the horizon or far outside the view ----------
 // (on the globe MapLibre can otherwise draw far-side markers in odd places when zoomed in)
@@ -1230,8 +1252,7 @@ const tHirise = document.getElementById('tHirise');
 if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
 function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
-tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); syncColourToggle(); save(); };
-syncColourToggle();
+tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
   const extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
@@ -1250,7 +1271,7 @@ siteSel.onchange = () => {
   const s = FLY[+siteSel.value]; siteSel.value = ''; if (!s) return;
   if (MARS && !showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
   // a gentle arc: out a little, across, then down to a zoom where HiRISE and the terrain still look good
-  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : EUROPA ? 5 : JUPITER ? 3.2 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
+  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : EUROPA ? 5 : GIANT ? 3.2 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
     easing: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, essential: true });
 };
 
@@ -1284,7 +1305,7 @@ function save() {
   if (restoring) return;
   try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 4, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
-    hirise: typeof showHirise === 'undefined' ? true : showHirise, colour: typeof marsColour === 'undefined' ? true : marsColour,
+    hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
 
@@ -1456,13 +1477,12 @@ document.addEventListener('keydown', e => {
 // BODY_SCALE (and the height slider) to get MapLibre's Earth-sized map metres. "Size" draws the buggy larger;
 // its speeds and gravity scale with it, so it handles the same at every size.
 const LRV = { len: 3.1, track: 1.83, base: 2.29, wheelR: 0.405, wheelW: 0.23, vmax: 13 / 3.6 };   // Apollo LRV: 13 km/h
-const G_MOON = MOON ? 1.62 : 3.72;   // surface gravity of the world you drive on (Moon or Mars)
-const BG = { on: false, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
-try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includes(s)) BG.S = s; const m = +localStorage.getItem('buggy-speed'); if ([1, 4, 15, 50].includes(m)) BG.M = m; } catch (e) {}
+const G_MOON = 1.62;
+const BG = { on: false, S: 10, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
+try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includes(s)) BG.S = s; } catch (e) {}
 let THREE = null, buggyLayer = null, buggyPrev = null;
 const driveBtn = document.getElementById('driveBtn'), hudEl = document.getElementById('hud');
-const DRIVE_LABEL = MOON ? '&#128665; Drive the moon buggy' : '&#128665; Drive a buggy on Mars';
-if (HAS_TERRAIN) { driveBtn.style.display = 'block'; driveBtn.innerHTML = DRIVE_LABEL; }
+if (MOON) driveBtn.style.display = 'block';
 const wrap180 = a => ((a + 540) % 360) - 180;
 
 function buildBuggy() {
@@ -1516,7 +1536,7 @@ function makeBuggyLayer() {
   // dust: no air on the Moon, so every grain flies on a clean parabola and drops straight back down
   const dust = [], dgeo = new T.IcosahedronGeometry(1, 0);
   for (let i = 0; i < 90; i++) {
-    const m = new T.Mesh(dgeo, new T.MeshBasicMaterial({ color: MOON ? 0xbdb6ad : 0xc08a5e, transparent: true, opacity: 0, depthWrite: false }));
+    const m = new T.Mesh(dgeo, new T.MeshBasicMaterial({ color: 0xbdb6ad, transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; scene.add(m); dust.push({ m, v: new T.Vector3(), life: 0, max: 1 });
   }
   BG.bug = bug; BG.dust = dust; BG.scene = scene;
@@ -1558,30 +1578,21 @@ function setBuggySize(S) {
   try { localStorage.setItem('moon-buggy-size', S); } catch (e) {}
 }
 document.querySelectorAll('#hSize button').forEach(b => b.onclick = () => { setBuggySize(+b.dataset.s); b.blur(); });
-function setBuggySpeed(M) {
-  BG.M = M;
-  document.querySelectorAll('#hSpeedSel button').forEach(b => b.classList.toggle('on', +b.dataset.m === M));
-  try { localStorage.setItem('buggy-speed', M); } catch (e) {}
-}
-document.querySelectorAll('#hSpeedSel button').forEach(b => b.onclick = () => { setBuggySpeed(+b.dataset.m); b.blur(); });
 
 // tyre tracks: one line with a gap, so it draws as two wheel tracks; broken wherever the buggy was in the air
-// Tyre tracks are drawn as real-size strips on the ground (polygons), so they stay put and keep their width at
-// every zoom. Each sample stores the four strip edges across the buggy; consecutive samples make one quad per
-// wheel. Finished chunks go to 'trail' and are rarely redrawn; only the current chunk is updated while driving.
-function styleTrail() {}
-const quads = (a, b) => [[[a[0], a[1], b[1], b[0], a[0]]], [[a[2], a[3], b[3], b[2], a[2]]]];
-function chunkFeature(seg) {
-  const polys = [];
-  for (let i = 1; i < seg.length; i++) polys.push(...quads(seg[i - 1], seg[i]));
-  return { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polys } };
+function styleTrail() {
+  if (!map.getLayer('trail') || BG.my == null) return;
+  const lat = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0).toLngLat().lat;
+  const px0 = 512 / (40075016.686 * Math.cos(lat * D2R)) * BODY_SCALE * BG.S;   // pixels per Moon metre at zoom 0
+  const w = px0 * LRV.wheelW, gap = px0 * (LRV.track - LRV.wheelW);
+  map.setPaintProperty('trail', 'line-width', ['interpolate', ['exponential', 2], ['zoom'], 0, w, 24, w * 2 ** 24]);
+  map.setPaintProperty('trail', 'line-gap-width', ['interpolate', ['exponential', 2], ['zoom'], 0, gap, 24, gap * 2 ** 24]);
 }
-function drawTrail(all) {
+function drawTrail() {
   const segs = BG.trail.filter(s => s.length > 1);
-  if (all !== false) map.getSource('trail').setData({ type: 'FeatureCollection', features: segs.slice(0, -1).map(chunkFeature) });
-  const live = BG.trail[BG.trail.length - 1];
-  map.getSource('trail-live').setData({ type: 'FeatureCollection', features: live.length > 1 ? [chunkFeature(live)] : [] });
+  map.getSource('trail').setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: segs } });
 }
+
 const HEADINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 function updateHud(ll) {
   const kmh = Math.abs(BG.v) * 3.6;
@@ -1596,19 +1607,19 @@ function driveStep(t) {
   if (!BG.on) return;
   BG.raf = requestAnimationFrame(driveStep);
   const dt = Math.min(0.05, (t - (BG.t || t)) / 1000) || 0.016; BG.t = t;
-  const k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1, vb = LRV.vmax * S * BG.M;   // vb: top speed without boost
-  const vmax = vb * boost, acc = vb * 0.6 * (k.boost ? 2.2 : 1), brake = vb * 1.6;
+  const k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1;
+  const vmax = LRV.vmax * S * boost, acc = LRV.vmax * S * 0.6 * (k.boost ? 2.2 : 1), brake = LRV.vmax * S * 1.6;
   const thr = (k.up ? 1 : 0) - (k.down ? 1 : 0), steerIn = (k.right ? 1 : 0) - (k.left ? 1 : 0);
   const mc0 = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), mu = mc0.meterInMercatorCoordinateUnits();
   // --- driving (only with wheels on the ground) ---
   if (!BG.air) {
     if (thr > 0) BG.v += (BG.v < 0 ? brake : acc) * dt;
     else if (thr < 0) BG.v -= (BG.v > 0 ? brake : acc * 0.6) * dt;
-    else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), vb * 0.35 * dt);
+    else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), LRV.vmax * S * 0.35 * dt);
     BG.v -= G_MOON * S * Math.sin(BG.pitch) * dt;                       // uphill slows you down
     if (BG.v > vmax) BG.v -= (BG.v - vmax) * Math.min(1, 1.5 * dt);
     if (BG.v < -vmax * 0.4) BG.v -= (BG.v + vmax * 0.4) * Math.min(1, 1.5 * dt);
-    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (LRV.vmax * S * 2));   // steer less the faster you go
+    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (LRV.vmax * S * 2));
     BG.steer += (steerIn * maxSteer - BG.steer) * Math.min(1, dt * 6);
     BG.heading += (BG.v / S) / LRV.base * Math.tan(BG.steer) * R2D * dt;
     if (k.hop && !BG.air) { BG.vz = (BG.vz > 0 ? BG.vz : 0) + Math.sqrt(2 * G_MOON * BODY_SCALE * S * LRV.len * BODY_SCALE * S * 0.8); BG.air = true; k.hop = false; spawnDust(14, 0.6, 0.8, false); }
@@ -1620,9 +1631,7 @@ function driveStep(t) {
   BG.dist += Math.abs(BG.v * dt);
   // --- ground: height under the buggy, and its slope from four points around it ---
   const mc = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), ll = mc.toLngLat(), llw = [wrapLon(ll.lng), ll.lat];
-  // MapLibre can throw while a height tile is half swapped in (fast driving); keep the last good height then
-  const qElev = p => { try { return map.queryTerrainElevation(p); } catch (e) { return null; } };
-  const elev = (dx, dy) => { const v = qElev([wrapLon(ll.lng + dx), ll.lat + dy]); return v == null ? (BG.g || 0) : v; };
+  const elev = (dx, dy) => map.queryTerrainElevation([wrapLon(ll.lng + dx), ll.lat + dy]) || 0;
   const g = elev(0, 0), k1 = BODY_SCALE * S, mpd = 111319.49;          // map metres per degree of latitude
   const half = LRV.base / 2 * k1, side = LRV.track / 2 * k1, cl = Math.cos(ll.lat * D2R);
   const fx = Math.sin(h), fy = Math.cos(h);
@@ -1633,8 +1642,7 @@ function driveStep(t) {
   // Height tiles arrive and sharpen while you drive, which changes the ground under you without you moving.
   // Re-measure where the buggy was last frame and carry it along with any such change, so it never drops
   // out of the sky or gets buried when a sharper tile loads.
-  const gp = BG.z != null && BG.pll ? qElev(BG.pll) : null;
-  if (gp != null) BG.z += gp - BG.g;
+  if (BG.z != null && BG.pll) BG.z += (map.queryTerrainElevation(BG.pll) || 0) - BG.g;
   BG.pll = llw;
   if (BG.z == null) { BG.z = g; BG.vz = 0; }
   else {
@@ -1671,27 +1679,20 @@ function driveStep(t) {
   }
   // --- tracks ---
   const seg = BG.trail[BG.trail.length - 1];
-  if (BG.air) { if (seg.length) { BG.trail.push([]); drawTrail(); } }
-  else if (!BG.tll || Math.hypot((ll.lng - BG.tll[0]) * cl, ll.lat - BG.tll[1]) * mpd / BODY_SCALE > Math.min(0.8 * S, 0.4 + Math.abs(BG.v) * 0.06)) {
-    BG.tll = [ll.lng, ll.lat];
-    const rx = fy / (mpd * cl), ry = -fx / mpd;                 // one map metre to the right, in degrees
-    const pt = o => [ll.lng + rx * o * k1, ll.lat + ry * o * k1];
-    const tw = LRV.track / 2, ww = LRV.wheelW / 2;
-    const row = [pt(-tw - ww), pt(-tw + ww), pt(tw - ww), pt(tw + ww)];
-    if (seg.length && Math.hypot((ll.lng - BG.tll0[0]) * cl, ll.lat - BG.tll0[1]) * mpd > 50 * LRV.len * k1) seg.length = 0;   // a teleport: start fresh
-    seg.push(row); BG.tll0 = BG.tll;
-    if (seg.length >= 150) {                                       // close this chunk; the next one starts where it ends
-      BG.trail.push([row]);
-      if (BG.trail.length > 60) BG.trail.shift();
-      drawTrail();
-    } else if (t - (BG.trailT || 0) > 120) { BG.trailT = t; drawTrail(false); }
+  if (BG.air) { if (seg.length) BG.trail.push([]); }
+  else {
+    const last = seg[seg.length - 1];
+    if (!last || Math.hypot((ll.lng - last[0]) * cl, ll.lat - last[1]) * 111319.49 / BODY_SCALE > 0.8 * S) {
+      seg.push([ll.lng, ll.lat]);
+      if (seg.length > 6000) BG.trail.push([[ll.lng, ll.lat]]);
+      if (t - (BG.trailT || 0) > 150) { BG.trailT = t; drawTrail(); }
+    }
   }
   // --- chase camera ---
   let db = wrap180(BG.heading - BG.camBearing); BG.camBearing += db * Math.min(1, dt * 2.5);
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
-  const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (LRV.vmax * S * 6)));   // pull back a bit at speed
-  const lenMap = LRV.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
-  map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(MAXSIMZOOM, Math.max(3, z)) });
+  const lenMap = LRV.len * k1, z = Math.log2(mode.px * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
+  map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(map.getMaxZoom(), Math.max(3, z)) });
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
 }
@@ -1703,9 +1704,8 @@ function driveKey(e) {
   if (a) { BG.keys[a] = down; e.preventDefault(); return; }
   if (!down) return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) BG.keys.hop = true; }
-  else if (/^Digit[1-4]$/.test(e.code)) setBuggySpeed([1, 4, 15, 50][+e.code.slice(5) - 1]);
   else if (e.code === 'KeyC') BG.camMode = (BG.camMode + 1) % 3;
-  else if (e.code === 'KeyR') { BG.trail = [[]]; BG.tll = null; drawTrail(); }
+  else if (e.code === 'KeyR') { BG.trail = [[]]; drawTrail(); }
   else if (e.key === '+' || e.key === '=') BG.zoomAdj = Math.min(2, BG.zoomAdj + 0.25);
   else if (e.key === '-') BG.zoomAdj = Math.max(-3, BG.zoomAdj - 0.25);
   else if (e.key === 'Escape') stopDrive();
@@ -1714,23 +1714,20 @@ document.addEventListener('keydown', driveKey); document.addEventListener('keyup
 window.addEventListener('blur', () => { BG.keys = {}; });
 map.getCanvasContainer().addEventListener('wheel', e => { if (!BG.on) return; e.preventDefault(); BG.zoomAdj = Math.min(2, Math.max(-3, BG.zoomAdj - Math.sign(e.deltaY) * 0.2)); }, { passive: false });
 document.querySelectorAll('#pad button').forEach(b => {
-  const a = b.dataset.k, K = () => FL.on ? FL.keys : BG.keys, ka = () => FL.on && a === 'hop' ? 'boost' : a;
-  b.addEventListener('pointerdown', e => { e.preventDefault(); K()[ka()] = true; b.classList.add('on'); b.setPointerCapture(e.pointerId); });
-  const up = () => { if (a !== 'hop' || FL.on) K()[ka()] = false; b.classList.remove('on'); };
+  const a = b.dataset.k === 'hop' ? 'hop' : b.dataset.k;
+  b.addEventListener('pointerdown', e => { e.preventDefault(); BG.keys[a] = true; b.classList.add('on'); b.setPointerCapture(e.pointerId); });
+  const up = () => { if (a !== 'hop') BG.keys[a] = false; b.classList.remove('on'); };
   b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
 });
 
-// With 3D terrain on, MapLibre 5 throws when asked for the ground height at zoom 18 or more, so the
-// buggy and jet cameras never go past this.
-const MAXSIMZOOM = 17.9;
 const HANDLERS = ['dragPan', 'dragRotate', 'scrollZoom', 'keyboard', 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'];
 async function startDrive() {
-  if (BG.on || FL.on || !HAS_TERRAIN) return;
+  if (BG.on || !HAS_TERRAIN) return;
   if (!THREE) {
     driveBtn.disabled = true; driveBtn.textContent = 'Loading the buggy…';
     try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
     catch (e) { showToast('Could not load the 3D engine (three.js). Check your connection and try again.'); }
-    driveBtn.disabled = false; driveBtn.innerHTML = DRIVE_LABEL;
+    driveBtn.disabled = false; driveBtn.innerHTML = '&#128665; Drive the moon buggy';
     if (!THREE) return;
   }
   if (measuring) setMeasuring(false);
@@ -1740,31 +1737,24 @@ async function startDrive() {
   map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
   map.setMaxZoom(21);
   buggyPrev.sky = map.getSky();
-  map.setSky(MOON ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
-    : { 'sky-color': '#b98d68', 'horizon-color': '#e6c7a4', 'fog-color': '#d9b590', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });   // butterscotch Mars sky
+  map.setSky({ 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 });
   HANDLERS.forEach(hn => map[hn].disable());
-  // Labels far from the buggy make MapLibre look up heights in tiles it hasn't loaded, which throws at speed;
-  // take them off the map while driving and put them back afterwards.
-  BG.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
-  BG.offMarkers.forEach(m => m.remove());
   if (!map.getSource('trail')) {
-    for (const id of ['trail', 'trail-live']) {
-      map.addSource(id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, tolerance: 0, maxzoom: 22, buffer: 16 });
-      map.addLayer({ id, type: 'fill', source: id, paint: { 'fill-color': '#1a1512', 'fill-opacity': 0.4, 'fill-antialias': true } }, 'grid');
-    }
+    map.addSource('trail', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1a1512', 'line-opacity': 0.45 } }, 'grid');
   }
   if (!buggyLayer) { buggyLayer = makeBuggyLayer(); map.addLayer(buggyLayer); }
   // start where you are looking if you are zoomed in, otherwise where the LRV first drove: Apollo 15 at Hadley Rille
-  const here = map.getZoom() >= 7, start = here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
+  const here = map.getZoom() >= 7, start = here ? map.getCenter() : new maplibregl.LngLat(3.634, 26.132);
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start);
   Object.assign(BG, { on: true, mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, g: 0, vz: 0, v: 0, steer: 0, pitch: 0, roll: 0, air: false,
-    heading: here ? map.getBearing() : 0, camBearing: here ? map.getBearing() : 0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null });
+    heading: here ? map.getBearing() : 0, camBearing: here ? map.getBearing() : 0, keys: {}, t: 0, dist: 0, trail: [[]] });
   BG.dust.forEach(d => { d.life = 0; d.m.visible = false; });
-  drawTrail(); setBuggySize(BG.S); setBuggySpeed(BG.M);
+  drawTrail(); setBuggySize(BG.S);
   document.body.classList.add('driving');
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
-  if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
+  if (!here) showToast('Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971');
   BG.raf = requestAnimationFrame(driveStep);
 }
 function stopDrive() {
@@ -1772,7 +1762,6 @@ function stopDrive() {
   BG.on = false; cancelAnimationFrame(BG.raf); BG.keys = {};
   document.body.classList.remove('driving');
   HANDLERS.forEach(hn => map[hn].enable());
-  (BG.offMarkers || []).forEach(m => m.addTo(map)); BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
   map.setSky(buggyPrev.sky || {});
   if (proj !== 'mercator') map.setProjection({ type: proj });
@@ -1783,284 +1772,6 @@ function stopDrive() {
 }
 driveBtn.onclick = startDrive;
 document.getElementById('hExit').onclick = stopDrive;
-
-// ---------- fighter jet ----------
-// A generic twin-tail fighter (about 19 m long), drawn at true size in its own three.js custom layer.
-// Arcade flight: the stick pitches and rolls the jet in its own frame, banking turns it, the afterburner
-// more than doubles the speed, and the speed class multiplies everything (25× crosses the Moon in minutes).
-// The world's gravity costs speed in a climb and gives it back in a dive. Touching the ground is a crash.
-const JET = { len: 19, vmin: 70, vmax: 420, vab: 760 };     // m/s: 250, 1,500 and 2,700 km/h at speed class 1×
-const FL = { on: false, M: 1, keys: {}, camMode: 0, invert: false };
-try { const m = +localStorage.getItem('jet-speed'); if ([1, 5, 25].includes(m)) FL.M = m; FL.invert = localStorage.getItem('jet-invert') === '1'; } catch (e) {}
-let jetLayer = null, jetPrev = null;
-const flyBtn = document.getElementById('flyBtn'), FLY_LABEL = '&#9992;&#65039; Fly a fighter jet';
-if (HAS_TERRAIN) flyBtn.style.display = 'block';
-
-function buildJet() {
-  const T = THREE, g = new T.Group();
-  const mat = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.35, flatShading: true, side: T.DoubleSide, ...o });
-  const hull = mat(0x8e979f), darker = mat(0x5e666e), black = mat(0x26292c);
-  const poly = (pts, m) => {                       // flat convex polygon from [x, y, z] points (triangle fan)
-    const pos = [];
-    for (let i = 1; i < pts.length - 1; i++) pos.push(...pts[0], ...pts[i], ...pts[i + 1]);
-    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
-    const mesh = new T.Mesh(geo, m); g.add(mesh); return mesh;
-  };
-  const add = (geo, m, x, y, z) => { const mesh = new T.Mesh(geo, m); mesh.position.set(x, y, z); g.add(mesh); return mesh; };
-  add(new T.CylinderGeometry(0.95, 1.15, 12, 14), hull, 0, 0.5, 0);          // fuselage, axis along +y (forward)
-  add(new T.ConeGeometry(0.95, 5, 14), hull, 0, 9, 0);                         // nose
-  add(new T.CylinderGeometry(1.15, 1.25, 3, 14), darker, 0, -7, 0);
-  const canopy = add(new T.SphereGeometry(0.75, 16, 10), mat(0x1d2b38, { metalness: 0.9, roughness: 0.08 }), 0, 4.6, 0.8);
-  canopy.scale.set(1, 2.8, 0.85);
-  for (const sx of [-1, 1]) {
-    add(new T.BoxGeometry(0.8, 4, 1.1), darker, sx * 1.35, 0.8, -0.25);        // air intakes
-    add(new T.CylinderGeometry(0.6, 0.5, 1.6, 12), black, sx * 0.62, -9.2, 0); // nozzles
-    poly([[sx * 0.9, 3.2, -0.15], [sx * 6.6, -3.9, -0.3], [sx * 6.6, -5.2, -0.3], [sx * 1.0, -5.7, -0.15]], hull);   // wings
-    poly([[sx * 1.0, -6.6, -0.1], [sx * 3.6, -8.6, -0.15], [sx * 3.6, -9.4, -0.15], [sx * 1.0, -9.6, -0.1]], darker); // tailplanes
-    poly([[sx * 1.1, -5.4, 0.7], [sx * 2.0, -8.3, 4.3], [sx * 2.0, -9.3, 4.3], [sx * 1.1, -9.4, 0.7]], darker);    // twin fins, canted out
-    poly([[sx * 0.95, 5.6, 0], [sx * 1.9, 1.5, -0.1], [sx * 1.0, 1.5, -0.1]], hull);                                   // strakes
-  }
-  // afterburner flames: cones pointing backwards, length follows the throttle
-  const flames = [];
-  for (const sx of [-1, 1]) {
-    const outer = new T.Mesh(new T.ConeGeometry(0.5, 1, 14, 1, true), new T.MeshBasicMaterial({ color: 0xff8a3c, transparent: true, opacity: 0.8, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
-    const inner = new T.Mesh(new T.ConeGeometry(0.28, 1, 10, 1, true), new T.MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.9, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
-    for (const f of [outer, inner]) { f.geometry.translate(0, 0.5, 0); f.geometry.rotateX(Math.PI); f.position.set(sx * 0.62, -10, 0); g.add(f); }
-    flames.push(outer, inner);
-  }
-  return { g, flames };
-}
-
-function makeJetLayer() {
-  const T = THREE, scene = new T.Scene(), cam = new T.Camera();
-  scene.add(new T.HemisphereLight(0xffffff, 0x555555, 1.0));
-  const sun = new T.DirectionalLight(0xffffff, 2.4); sun.position.set(0.5, 0.4, 0.8); scene.add(sun);
-  const jet = buildJet(), holder = new T.Group(); holder.add(jet.g); scene.add(holder);
-  holder.scale.setScalar(BODY_SCALE);
-  const boom = [], bgeo = new T.IcosahedronGeometry(1, 1);
-  for (let i = 0; i < 70; i++) {
-    const m = new T.Mesh(bgeo, new T.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0, depthWrite: false }));
-    m.visible = false; scene.add(m); boom.push({ m, v: new T.Vector3(), life: 0, max: 1 });
-  }
-  Object.assign(FL, { jet, holder, boom, q: new T.Quaternion() });
-  let renderer;
-  return {
-    id: 'jet', type: 'custom', renderingMode: '3d',
-    onAdd(m, gl) { renderer = new T.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true }); renderer.autoClear = false; },
-    render(gl, args) {
-      if (!FL.on) return;
-      const mc = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0), mu = mc.meterInMercatorCoordinateUnits();
-      const l = new T.Matrix4().makeTranslation(FL.mx, FL.my, FL.alt * mu).scale(new T.Vector3(mu, -mu, mu));
-      cam.projectionMatrix = new T.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(l);
-      renderer.resetState(); renderer.render(scene, cam);
-    }
-  };
-}
-
-function setJetSpeed(M) {
-  if (FL.v) FL.v *= M / FL.M;
-  FL.M = M;
-  document.querySelectorAll('#jSpeedSel button').forEach(b => b.classList.toggle('on', +b.dataset.m === M));
-  try { localStorage.setItem('jet-speed', M); } catch (e) {}
-}
-document.querySelectorAll('#jSpeedSel button').forEach(b => b.onclick = () => { setJetSpeed(+b.dataset.m); b.blur(); });
-function setInvert(on) {
-  FL.invert = on; document.getElementById('jInvT').textContent = on ? 'like a game' : 'stick';
-  document.getElementById('jInv').title = on ? 'Up arrow pitches the nose up' : 'Like a flight stick: up arrow pushes the nose down';
-  try { localStorage.setItem('jet-invert', on ? '1' : '0'); } catch (e) {}
-}
-document.getElementById('jInv').onclick = e => { setInvert(!FL.invert); e.currentTarget.blur(); };
-setInvert(FL.invert);
-
-function jetBoom() {
-  const k = BODY_SCALE;
-  for (const d of FL.boom) {
-    const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI / 2, sp = (15 + Math.random() * 45) * k;
-    d.m.position.set(0, 0, 2 * k);
-    d.v.set(Math.cos(a) * Math.cos(e) * sp, Math.sin(a) * Math.cos(e) * sp, Math.sin(e) * sp);
-    d.life = d.max = 1 + Math.random() * 1.6; d.m.scale.setScalar((2 + Math.random() * 5) * k); d.m.visible = true;
-    d.m.material.color.setHex(Math.random() < 0.6 ? 0xff7a2a : 0x6b625a);
-  }
-}
-
-function flyStep(t) {
-  if (!FL.on) return;
-  FL.raf = requestAnimationFrame(flyStep);
-  const T = THREE, dt = Math.min(0.05, (t - (FL.t || t)) / 1000) || 0.016; FL.t = t;
-  const k = FL.keys, M = FL.M, BS = BODY_SCALE;
-  const qElev = p => { try { return map.queryTerrainElevation(p); } catch (e) { return null; } };
-  let mu = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).meterInMercatorCoordinateUnits();
-  const ll0 = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).toLngLat();
-  const gHere = qElev([wrapLon(ll0.lng), ll0.lat]); if (gHere != null) FL.g = gHere;
-
-  if (FL.crashT > 0) {                                  // wreck: wait, then a fresh jet 1.5 km above the ground
-    FL.crashT -= dt;
-    if (FL.crashT <= 0) {
-      FL.alt = (FL.g || 0) + 1500 * BS; FL.v = (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * M; FL.thr = 0.6;
-      FL.q.setFromAxisAngle(new T.Vector3(0, 0, 1), -FL.heading * D2R); FL.jet.g.visible = true;
-    }
-  } else {
-    // --- controls: rotate the jet in its own frame (x right, y forward, z up) ---
-    const sgn = FL.invert ? 1 : -1;
-    const pitchIn = ((k.up ? 1 : 0) - (k.down ? 1 : 0)) * sgn, rollIn = (k.right ? 1 : 0) - (k.left ? 1 : 0), yawIn = (k.yawR ? 1 : 0) - (k.yawL ? 1 : 0);
-    if (k.thrUp) FL.thr = Math.min(1, FL.thr + 0.6 * dt);
-    if (k.thrDown) FL.thr = Math.max(0, FL.thr - 0.6 * dt);
-    const right = new T.Vector3(1, 0, 0).applyQuaternion(FL.q), bank = Math.asin(Math.max(-1, Math.min(1, -right.z)));
-    const ease = Math.min(1, dt * 5);
-    FL.pr += (pitchIn * 1.25 - FL.pr) * ease;
-    FL.rr += ((rollIn ? rollIn * 2.6 : -bank * 0.9) - FL.rr) * ease;    // let go of the stick and the wings level out
-    FL.yr += (-yawIn * 0.45 - FL.yr) * ease;
-    FL.q.multiply(new T.Quaternion().setFromEuler(new T.Euler(FL.pr * dt, FL.rr * dt, FL.yr * dt, 'XYZ')));
-    // banking turns the jet (a coordinated turn), so a roll alone already steers
-    FL.q.premultiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), -1.1 * Math.sin(bank) * dt));
-    FL.q.normalize();
-    // --- speed ---
-    const f = new T.Vector3(0, 1, 0).applyQuaternion(FL.q);
-    const target = (k.boost ? JET.vab : JET.vmin + FL.thr * (JET.vmax - JET.vmin)) * M;
-    FL.v += (target - FL.v) * Math.min(1, dt * (k.boost ? 0.7 : 0.45));
-    FL.v -= G_MOON * f.z * dt * M;                       // climbing costs speed, diving gives it back
-    FL.v = Math.max(JET.vmin * 0.5 * M, FL.v);
-    // --- move ---
-    const d = FL.v * dt * BS;
-    FL.mx += f.x * d * mu; FL.my -= f.y * d * mu; FL.alt += f.z * d;
-    FL.my = Math.min(0.97, Math.max(0.03, FL.my));
-    FL.alt = Math.min(FL.alt, 120000 * BS);
-    FL.heading = Math.atan2(f.x, f.y) * R2D; FL.climb = Math.asin(Math.max(-1, Math.min(1, f.z)));
-    FL.bank = bank;
-    // --- ground ---
-    const ll = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).toLngLat(), g = qElev([wrapLon(ll.lng), ll.lat]);
-    if (g != null) FL.g = g;
-    const agl = FL.alt - (FL.g || 0);
-    if (agl < 1.5 * BS) {
-      FL.crashT = 2.6; FL.v = 0; FL.alt = (FL.g || 0) + 1.5 * BS; FL.jet.g.visible = false; jetBoom();
-      showToast('Crashed! New jet in a moment…');
-    }
-    const sink = -f.z * FL.v * BS;
-    document.getElementById('pullup').classList.toggle('on', sink > 0 && agl / sink < 4 && FL.crashT <= 0);
-    FL.jet.g.quaternion.copy(FL.q);
-    const fl = k.boost ? 1 : 0.25 + FL.thr * 0.45;
-    FL.jet.flames.forEach((m, i) => { m.scale.set(1, (i % 2 ? 3 : 5) * fl * (0.9 + Math.random() * 0.2), 1); m.visible = FL.camMode !== 2; });
-  }
-  // explosion debris flies and falls in the world's gravity
-  for (const d of FL.boom) {
-    if (d.life <= 0) continue;
-    d.life -= dt; d.v.z -= G_MOON * BS * dt;
-    d.m.position.addScaledVector(d.v, dt);
-    if (d.life <= 0) { d.m.visible = false; continue; }
-    d.m.material.opacity = Math.min(1, d.life / d.max * 1.5);
-  }
-  FL.holder.visible = FL.camMode !== 2 || FL.crashT > 0;
-  // --- camera ---
-  mu = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).meterInMercatorCoordinateUnits();
-  const pos = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).toLngLat(), mpd = 111319.49, cl = Math.cos(pos.lat * D2R);
-  const at = (east, north) => [pos.lng + east / (mpd * cl), pos.lat + north / mpd];
-  FL.camYaw += Math.atan2(Math.sin((FL.heading - FL.camYaw) * D2R), Math.cos((FL.heading - FL.camYaw) * D2R)) * R2D * Math.min(1, dt * 3);
-  let opts;
-  try {
-    if (FL.camMode === 2 && FL.crashT <= 0) {           // cockpit
-      const f = new T.Vector3(0, 1, 0).applyQuaternion(FL.q), u = new T.Vector3(0, 0, 1).applyQuaternion(FL.q);
-      const eye = new T.Vector3().addScaledVector(f, 6 * BS).addScaledVector(u, 1.6 * BS), look = eye.clone().addScaledVector(f, 2000 * BS);
-      opts = map.calculateCameraOptionsFromTo(at(eye.x, eye.y), FL.alt + eye.z, at(look.x, look.y), FL.alt + look.z);
-      opts.roll = FL.bank * R2D;
-    } else {
-      const far = FL.camMode === 1, speedPull = 1 + 0.5 * Math.log2(1 + FL.v / (JET.vmax * M));
-      const D = (far ? 220 : 50) * BS * speedPull, el = (far ? 22 : 11) * D2R, yaw = FL.camYaw * D2R;
-      const e = -Math.sin(yaw) * D * Math.cos(el), n = -Math.cos(yaw) * D * Math.cos(el);
-      const camLL = at(e, n), camG = qElev([wrapLon(camLL[0]), camLL[1]]);
-      let camAlt = FL.alt + D * Math.sin(el);
-      if (camG != null) camAlt = Math.max(camAlt, camG + 12 * BS);
-      opts = map.calculateCameraOptionsFromTo(camLL, camAlt, [pos.lng, pos.lat], FL.alt);
-      if (opts.zoom > MAXSIMZOOM) {                     // too close for MapLibre: back off along the same line
-        const f = 2 ** (opts.zoom - MAXSIMZOOM), e2 = e * f, n2 = n * f;
-        opts = map.calculateCameraOptionsFromTo(at(e2, n2), FL.alt + (camAlt - FL.alt) * f, [pos.lng, pos.lat], FL.alt);
-      }
-      opts.roll = (FL.bank || 0) * R2D * 0.2;
-    }
-    opts.pitch = Math.min(170, Math.max(0, opts.pitch));
-    opts.zoom = Math.min(MAXSIMZOOM, opts.zoom);
-    map.jumpTo(opts);
-  } catch (e) { FL.camErr = (FL.camErr || 0) + 1; }
-  map.triggerRepaint();
-  if (t - (FL.hudT || 0) > 100) {
-    FL.hudT = t;
-    const kmh = FL.v * 3.6;
-    document.getElementById('jSpeed').innerHTML = Math.round(kmh).toLocaleString('en') + ' <small>km/h</small>';
-    const agl = (FL.alt - (FL.g || 0)) / BS;
-    document.getElementById('jAlt').textContent = agl < 10000 ? Math.round(agl).toLocaleString('en') + ' m' : (agl / 1000).toFixed(1) + ' km';
-    document.getElementById('jHdg').textContent = String(Math.round(((FL.heading % 360) + 360) % 360)).padStart(3, '0') + '°';
-    document.getElementById('jThr').style.width = (k.boost ? 100 : FL.thr * 100) + '%';
-    document.getElementById('jThrBox').classList.toggle('ab', !!k.boost);
-  }
-}
-
-const JKEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', KeyA: 'yawL', KeyD: 'yawR', KeyW: 'thrUp', KeyS: 'thrDown', ShiftLeft: 'boost', ShiftRight: 'boost' };
-function flyKey(e) {
-  if (!FL.on || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
-  const down = e.type === 'keydown', a = JKEYS[e.code];
-  if (a) { FL.keys[a] = down; e.preventDefault(); return; }
-  if (!down) return;
-  if (/^Digit[1-3]$/.test(e.code)) setJetSpeed([1, 5, 25][+e.code.slice(5) - 1]);
-  else if (e.code === 'KeyC') FL.camMode = (FL.camMode + 1) % 3;
-  else if (e.code === 'KeyI') setInvert(!FL.invert);
-  else if (e.key === 'Escape') stopFly();
-}
-document.addEventListener('keydown', flyKey); document.addEventListener('keyup', flyKey);
-window.addEventListener('blur', () => { FL.keys = {}; });
-
-async function startFly() {
-  if (FL.on || BG.on || !HAS_TERRAIN) return;
-  if (!THREE) {
-    flyBtn.disabled = true; flyBtn.textContent = 'Fuelling the jet…';
-    try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
-    catch (e) { showToast('Could not load the 3D engine (three.js). Check your connection and try again.'); }
-    flyBtn.disabled = false; flyBtn.innerHTML = FLY_LABEL;
-    if (!THREE) return;
-  }
-  if (measuring) setMeasuring(false);
-  popup.remove();
-  jetPrev = { padding: map.getPadding(), maxZoom: map.getMaxZoom(), maxPitch: map.getMaxPitch(), sky: map.getSky() };
-  if (proj !== 'mercator') map.setProjection({ type: 'mercator' });
-  map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
-  map.setMaxZoom(21); map.setMaxPitch(170); map.setCenterClampedToGround(false);
-  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
-  map.setSky(MOON ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
-    : { 'sky-color': '#b98d68', 'horizon-color': '#e6c7a4', 'fog-color': '#d9b590', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });
-  HANDLERS.forEach(hn => map[hn].disable());
-  FL.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
-  FL.offMarkers.forEach(m => m.remove());
-  if (!jetLayer) { jetLayer = makeJetLayer(); map.addLayer(jetLayer); }
-  // take off from where you are looking, or over the Moon's Montes Apenninus / Mars's Valles Marineris when zoomed out
-  const here = map.getZoom() >= 6, start = here ? map.getCenter() : MOON ? new maplibregl.LngLat(-2.5, 19.5) : new maplibregl.LngLat(-70, -8);
-  const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : MOON ? 20 : 90;
-  let g0 = null; try { g0 = map.queryTerrainElevation(start); } catch (e) {}
-  Object.assign(FL, { on: true, mx: mc.x, my: mc.y, g: g0 || 0, alt: (g0 || 0) + 1200 * BODY_SCALE, v: (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * FL.M, thr: 0.6,
-    heading, camYaw: heading, pr: 0, rr: 0, yr: 0, bank: 0, crashT: 0, keys: {}, t: 0, camMode: 0 });
-  FL.q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -heading * D2R);
-  FL.jet.g.visible = true; FL.boom.forEach(d => { d.life = 0; d.m.visible = false; });
-  setJetSpeed(FL.M);
-  document.body.classList.add('flying');
-  document.activeElement && document.activeElement.blur();
-  if (!here) showToast(MOON ? 'Airborne over the Montes Apenninus. Hold Shift for the afterburner!' : 'Airborne over Valles Marineris. Hold Shift for the afterburner!');
-  FL.raf = requestAnimationFrame(flyStep);
-}
-function stopFly() {
-  if (!FL.on) return;
-  FL.on = false; cancelAnimationFrame(FL.raf); FL.keys = {};
-  document.body.classList.remove('flying');
-  document.getElementById('pullup').classList.remove('on');
-  HANDLERS.forEach(hn => map[hn].enable());
-  (FL.offMarkers || []).forEach(m => m.addTo(map)); FL.offMarkers = null;
-  map.setCenterClampedToGround(true);
-  map.setPadding(jetPrev.padding); map.setSky(jetPrev.sky || {});
-  if (proj !== 'mercator') map.setProjection({ type: proj });
-  applyTerrain(false);
-  map.jumpTo({ roll: 0 });
-  map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 14), duration: 900 });
-  map.once('moveend', () => { map.setMaxPitch(jetPrev.maxPitch); map.setMaxZoom(jetPrev.maxZoom); });
-  map.triggerRepaint();
-}
-flyBtn.onclick = startFly;
-document.getElementById('jExit').onclick = stopFly;
 
 map.on('load', () => {
   if (!fellBack) setBase(wantedBase);
@@ -2079,6 +1790,8 @@ map.on('load', () => {
     if (saved.items.some(p => /^[pc]:/.test(String(p.n)))) ensureProvinces().then(restore); else restore();
   } else if (JUPITER) {
     addCountry('earth', toMapLat(-22), -27);              // the whole Earth, next to the Great Red Spot
+  } else if (SATURN) {
+    addCountry('earth', toMapLat(33), -40);               // the whole Earth, in the band of the 2010–11 storm
   } else if (MARS && !new URLSearchParams(location.search).has('body')) {
     // only a first-time visitor to Mars gets two examples; a world you switch to starts empty
     addCountry('United States of America', -12, -62);   // over Valles Marineris
