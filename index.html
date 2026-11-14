@@ -57,6 +57,12 @@
   .terr .exag input{flex:1;accent-color:var(--accent);min-width:60px}
   .terr .exag span{width:30px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
   .basesel select{flex:1;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:13px}
+  .measure{position:absolute;z-index:15;left:50%;bottom:34px;transform:translateX(-50%);background:var(--panel,#1c1210);border:1px solid var(--accent);color:var(--text);padding:7px 8px 7px 14px;border-radius:9px;font-size:13px;display:none;align-items:center;gap:10px;max-width:92%;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+  .measure.on{display:flex}
+  .measure b{color:var(--accent);font-weight:600}
+  .measure .hint{color:var(--muted)}
+  .measure button{background:none;border:1px solid #4a362e;color:var(--text);border-radius:6px;padding:3px 8px;font:inherit;font-size:12px;cursor:pointer}
+  .measure button:hover{border-color:var(--accent)}
   .toast{position:absolute;z-index:20;left:50%;top:14px;transform:translateX(-50%);background:#3a1e14;border:1px solid var(--accent);color:var(--text);padding:8px 14px;border-radius:9px;font-size:13px;display:none;max-width:90%}
   .search input{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:14px;outline:none}
   .search input:focus{border-color:var(--accent);background:rgba(255,255,255,.08)}
@@ -141,6 +147,7 @@
 </div>
 <div class="coords" id="coords"></div>
 <div class="toast" id="toast"></div>
+<div class="measure" id="measure"><span id="mText">Click on the map to start measuring</span><button type="button" id="mClear">Clear</button><button type="button" id="mDone" aria-label="Stop measuring">&times;</button></div>
 <div class="scale" id="scale"><div id="scaleBar"></div><span id="scaleTxt"></span></div>
 <div class="credit"><span id="baseCredit"></span> · tiles via <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA Mars Trek</a> · Borders: Natural Earth</div>
 
@@ -389,6 +396,7 @@ const map = new maplibregl.Map({
       countries: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       outlines: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       grid: { type: 'geojson', data: makeGrid() },
+      measure: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 }
     },
     layers: [
@@ -398,7 +406,12 @@ const map = new maplibregl.Map({
         paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 1], 'raster-fade-duration': 200 } },
       { id: 'grid', type: 'line', source: 'grid', layout: { visibility: 'none' }, paint: { 'line-color': '#fff', 'line-opacity': 0.25, 'line-width': 0.7 } },
       { id: 'c-fill', type: 'fill', source: 'countries', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.55, 'fill-antialias': false } },
-      { id: 'c-line', type: 'line', source: 'outlines', paint: { 'line-color': '#fff', 'line-width': 1.4 } }
+      { id: 'c-line', type: 'line', source: 'outlines', paint: { 'line-color': '#fff', 'line-width': 1.4 } },
+      { id: 'm-fill', type: 'fill', source: 'measure', filter: ['==', ['get', 'k'], 'area'], paint: { 'fill-color': '#ffb347', 'fill-opacity': 0.18 } },
+      { id: 'm-casing', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'line'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#1c1210', 'line-width': 5, 'line-opacity': 0.6 } },
+      { id: 'm-line', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'line'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffb347', 'line-width': 2.5 } },
+      { id: 'm-live', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'live'], paint: { 'line-color': '#ffb347', 'line-width': 2, 'line-dasharray': [2, 2] } },
+      { id: 'm-pts', type: 'circle', source: 'measure', filter: ['==', ['get', 'k'], 'pt'], paint: { 'circle-radius': 4.5, 'circle-color': '#fff', 'circle-stroke-color': '#e8772e', 'circle-stroke-width': 2, 'circle-pitch-alignment': 'map' } }
     ]
   }
 });
@@ -415,6 +428,8 @@ class ViewControl {
     btn('&#8634;', 'Rotate left', () => m.easeTo({ bearing: m.getBearing() - 30, duration: 300 }));
     btn('&#8635;', 'Rotate right', () => m.easeTo({ bearing: m.getBearing() + 30, duration: 300 }));
     btn('N', 'Reset view: north up, no tilt', () => m.easeTo({ bearing: 0, pitch: 0, duration: 600 }));
+    this.ruler = btn('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>',
+      'Measure distance and area', () => setMeasuring(!measuring));
     const sync = () => this.tilt3d.classList.toggle('on', m.getPitch() > 10);
     m.on('pitchend', sync); m.on('load', sync);
     return el;
@@ -651,7 +666,7 @@ let drag = null, raf = 0, pending = null;
 const findItem = e => { const f = e.features && e.features[0]; return f && placed.find(p => p.id === f.properties.id); };
 
 map.on('mousemove', 'c-fill', e => {
-  if (drag) return;
+  if (drag || measuring) return;
   const it = findItem(e); if (!it) return;
   map.getCanvas().style.cursor = 'grab';
   popup.setLngLat(e.lngLat).setHTML(`<b>${it.name}</b><br>${fmtArea(it.area)} · ${pctMars(it.area)} of Mars<br><span style="color:var(--muted)">Drag to move · Shift-drag to rotate</span>`).addTo(map);
@@ -659,6 +674,7 @@ map.on('mousemove', 'c-fill', e => {
 map.on('mouseleave', 'c-fill', () => { if (!drag) { map.getCanvas().style.cursor = ''; popup.remove(); } });
 
 function startDrag(e) {
+  if (measuring) return;
   const oe = e.originalEvent;
   // leave right-drag, Ctrl/⌘-drag and multi-finger gestures to the map (tilt / rotate)
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
@@ -885,6 +901,88 @@ function save() {
     hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
+
+// ---------- measure tool ----------
+// Click to add points (distances along great circles, on Mars), click the first point to close a shape and get
+// its area, double-click or Enter to finish, Backspace to undo the last point, Esc to stop.
+let measuring = false, mPts = [], mClosed = false, mDone = false, mHover = null;
+const mBox = document.getElementById('measure'), mText = document.getElementById('mText');
+const fmtKm = km => km < 1 ? Math.round(km * 1000) + ' m' : km < 100 ? km.toFixed(1) + ' km' : Math.round(km).toLocaleString('en') + ' km';
+const arc = (a, b) => {          // densified great circle, longitudes kept continuous so the line never jumps
+  const f = d3.geoInterpolate(a, b), n = Math.max(2, Math.ceil(d3.geoDistance(a, b) * R2D / 0.5)), out = [];
+  for (let i = 0; i <= n; i++) out.push(f(i / n));
+  for (let i = 1; i < out.length; i++) { while (out[i][0] - out[i - 1][0] > 180) out[i][0] -= 360; while (out[i][0] - out[i - 1][0] < -180) out[i][0] += 360; }
+  return out;
+};
+const pathKm = pts => { let d = 0; for (let i = 1; i < pts.length; i++) d += d3.geoDistance(pts[i - 1], pts[i]) * R_MARS; return d; };
+function ringAreaKm2(pts) {
+  const ring = [...pts, pts[0]];
+  let a = d3.geoArea({ type: 'Polygon', coordinates: [ring] });
+  if (a > 2 * Math.PI) a = 4 * Math.PI - a;          // d3 takes winding to mean "the outside"; we want the smaller side
+  return a * R_MARS * R_MARS;
+}
+function drawMeasure() {
+  const f = [], pts = mPts.slice();
+  const lineOf = (ps, closed) => { const c = []; for (let i = 1; i < ps.length; i++) { const seg = arc(ps[i - 1], ps[i]); if (c.length) { const off = c[c.length - 1][0] - seg[0][0]; seg.forEach(p => p[0] += Math.round(off / 360) * 360); seg.shift(); } c.push(...seg); }
+    if (closed && ps.length > 2) { const seg = arc(ps[ps.length - 1], ps[0]); const off = c[c.length - 1][0] - seg[0][0]; seg.forEach(p => p[0] += Math.round(off / 360) * 360); seg.shift(); c.push(...seg); } return c; };
+  if (pts.length > 1) f.push({ type: 'Feature', properties: { k: 'line' }, geometry: { type: 'LineString', coordinates: lineOf(pts, mClosed) } });
+  if (mClosed && pts.length > 2) {
+    let ring = lineOf(pts, true); ring.push(ring[0].slice());
+    if (d3.geoArea({ type: 'Polygon', coordinates: [ring] }) > 2 * Math.PI) ring = ring.reverse();
+    // cut at the antimeridian / close over a pole with the same clipper the countries use
+    const polys = toPlanar([[ring]]);
+    if (polys.length) f.push({ type: 'Feature', properties: { k: 'area' }, geometry: { type: 'MultiPolygon', coordinates: polys.slice() } });
+  }
+  if (!mClosed && !mDone && mHover && pts.length) f.push({ type: 'Feature', properties: { k: 'live' }, geometry: { type: 'LineString', coordinates: arc(pts[pts.length - 1], mHover) } });
+  pts.forEach(p => f.push({ type: 'Feature', properties: { k: 'pt' }, geometry: { type: 'Point', coordinates: p } }));
+  const src = map.getSource('measure'); if (src) src.setData({ type: 'FeatureCollection', features: f });
+  // read-out
+  let t;
+  if (!pts.length) t = '<span class="hint">Click on the map to start measuring</span>';
+  else {
+    const live = !mClosed && !mDone && mHover ? pathKm([...pts, mHover]) : null;
+    const total = pathKm(mClosed ? [...pts, pts[0]] : pts);
+    t = (mClosed ? 'Perimeter ' : 'Distance ') + '<b>' + fmtKm(live ?? total) + '</b>';
+    if (mClosed) t += ' · Area <b>' + fmtArea(ringAreaKm2(pts)) + '</b> · ' + pctMars(ringAreaKm2(pts)) + ' of Mars';
+    else if (!mDone) t += pts.length > 2 ? ' <span class="hint">· click the first point to measure an area, double-click to finish</span>' : ' <span class="hint">· double-click to finish</span>';
+  }
+  mText.innerHTML = t;
+}
+function clearMeasure() { mPts = []; mClosed = mDone = false; mHover = null; drawMeasure(); }
+function setMeasuring(on) {
+  measuring = on; mBox.classList.toggle('on', on);
+  const vc = document.querySelector('.viewctrl'); const rb = vc && vc.querySelector('button:last-child'); if (rb) rb.classList.toggle('on', on);
+  map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  if (on) { map.doubleClickZoom.disable(); popup.remove(); } else { map.doubleClickZoom.enable(); clearMeasure(); }
+  drawMeasure();
+}
+document.getElementById('mClear').onclick = clearMeasure;
+document.getElementById('mDone').onclick = () => setMeasuring(false);
+map.on('click', e => {
+  if (!measuring) return;
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  if (mClosed || mDone) { mPts = []; mClosed = mDone = false; }
+  if (mPts.length > 2) {            // clicking near the first point closes the shape
+    const a = map.project(mPts[0]);
+    if (Math.hypot(a.x - e.point.x, a.y - e.point.y) < 12) { mClosed = true; drawMeasure(); return; }
+  }
+  const last = mPts[mPts.length - 1];
+  if (!last || Math.hypot(...['x', 'y'].map(k => map.project(last)[k] - e.point[k])) > 3) mPts.push(p);
+  drawMeasure();
+});
+map.on('dblclick', e => { if (measuring && mPts.length > 1) { e.preventDefault(); mDone = true; drawMeasure(); } });
+map.on('mousemove', e => {
+  if (!measuring) return;
+  map.getCanvas().style.cursor = 'crosshair';
+  if (mPts.length && !mClosed && !mDone) { mHover = [e.lngLat.lng, e.lngLat.lat]; drawMeasure(); }
+});
+map.getCanvas().addEventListener('mouseleave', () => { if (measuring && mHover) { mHover = null; drawMeasure(); } });
+document.addEventListener('keydown', e => {
+  if (!measuring || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if (e.key === 'Escape') setMeasuring(false);
+  else if (e.key === 'Enter' && mPts.length > 1) { mDone = true; drawMeasure(); }
+  else if (e.key === 'Backspace' && mPts.length) { e.preventDefault(); if (mClosed || mDone) mClosed = mDone = false; else mPts.pop(); drawMeasure(); }
+});
 
 map.on('load', () => {
   if (!fellBack) setBase(wantedBase);
