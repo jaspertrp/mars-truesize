@@ -2311,7 +2311,8 @@ const spaceLayer = {
     this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), d00: U('u_d00'), d10: U('u_d10'), d01: U('u_d01'), d11: U('u_d11'),
       q: U('u_q'), w: U('u_w'), up: U('u_up'), haze: U('u_haze'), skytop: U('u_skytop'), dip: U('u_dip'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
   },
-  render(gl, args) {
+  render(gl, args) { try { this.draw(gl, args); } catch (e) { if (!this.warned) { this.warned = true; console.warn('space view', e); } } },
+  draw(gl, args) {
     const V = FL.on && FL.view;
     if (!V || !THREE) return;
     const hEq = V.agl / R_EQ_M, w = Math.min(1, Math.max(0, (hEq - 0.008) / (0.04 - 0.008)));
@@ -2451,8 +2452,14 @@ function flyStep(t) {
     // --- move ---  (the higher you are, the faster you go: speed grows with height above 20 km, so space is reachable)
     FL.af = Math.max(1, (FL.alt - (FL.g || 0)) / BS / 20000);
     const d = FL.v * FL.af * dt * BS;
-    FL.mx += f.x * d * mu; FL.my -= f.y * d * mu; FL.alt += f.z * d;
-    FL.my = Math.min(0.97, Math.max(0.03, FL.my));
+    // high up, the same distance flown covers less of the planet below (ground track shrinks by R / (R + h))
+    const gs = 1 / (1 + Math.max(0, FL.alt - (FL.g || 0)) / BS / (R_BODY * 1000));
+    FL.mx += f.x * d * mu * gs; FL.my -= f.y * d * mu * gs; FL.alt += f.z * d;
+    FL.mx -= Math.floor(FL.mx);                          // keep longitude in range however far you fly
+    if (FL.my < 0.03 || FL.my > 0.97) {                  // over the pole: come out on the other side, heading the other way
+      FL.my = FL.my < 0.03 ? 0.06 - FL.my : 1.94 - FL.my; FL.mx = (FL.mx + 0.5) % 1;
+      FL.q.premultiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), Math.PI)); FL.camYaw += 180;
+    }
     FL.alt = Math.min(FL.alt, 40 * R_BODY * 1000 * BS);   // up to 40 planet radii
     FL.heading = Math.atan2(f.x, f.y) * R2D; FL.climb = Math.asin(Math.max(-1, Math.min(1, f.z)));
     FL.bank = bank;
