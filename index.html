@@ -388,7 +388,7 @@ function getSrc(bm, z, r, c) {
 const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D;
 // Near the poles the map is drawn by stretching the last row of pixels (above 85°) into a cap, which looks
 // like a pinwheel. Fading the last few degrees into one average polar value turns that into a smooth cap.
-const POLE_FADE0 = GIANT ? 84 : 81.5, POLE_FADE1 = 85.05;   // gas giants: keep the polar detail (Juno's cyclones, Saturn's hexagon)
+const POLE_FADE0 = GIANT || MARS ? 84 : 81.5, POLE_FADE1 = 85.05;   // gas giants: keep the polar detail (Juno's cyclones, Saturn's hexagon)
 const poleWeight = lat => { const t = (Math.abs(lat) - POLE_FADE0) / (POLE_FADE1 - POLE_FADE0); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
 const poleColorCache = {};
 function poleColor(bm) {        // -> Promise<{n:'rgb()', s:'rgb()'}|null>, averaged from the coarsest source level
@@ -1196,6 +1196,131 @@ const npoleLayer = {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
   }
 };
+// ---------- Mars polar caps ----------
+// MapLibre's tiles stop at 85° latitude and the last few degrees are faded to one colour. Above 84° this layer draws
+// the poles straight from NASA Mars Trek's polar-stereographic versions of the same basemaps, so the north polar ice
+// cap (its spiral troughs, Chasma Boreale) and the south polar cap show properly. Trek's polar grid: pole at the
+// centre, ±1,821 km (down to 60°), level L = 2^L x 2^L tiles of 256 px in the left half of the tile matrix; checked
+// against the global map: x = rho·sin(lon), y (down) = ±rho·cos(lon) for north/south, rho = 2R·tan(colat/2).
+// Textures are assembled from tiles at three levels (≈1.8 km, 0.9 km, 0.44 km per pixel) as you zoom in near a pole.
+// With 3D terrain the cap sits at the mean height of the polar ring, the same height the terrain is flattened to.
+const MARS_POLAR = {
+  relief: 'Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw',
+  viking: 'Mars_Viking_MDIM21_ClrMosaic_global_232m',
+  themis: 'Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12_clon0_ly'
+};
+const POLAR_HALF = 1821000, POLAR_R = 3396190, CAP_FROM = 83.5, CAP_FULL = 84.5;
+function polarLayerFor(k) {
+  if (k === 'relief') return MARS_POLAR.relief;
+  if (k === 'viking' || k === 'classic') return MARS_POLAR.viking;
+  return (typeof marsColour !== 'undefined' && marsColour) ? MARS_POLAR.viking : MARS_POLAR.themis;   // THEMIS, CTX
+}
+const polarTex = new Map();         // key pole|layer|L -> { tex, ready, x0, y0, size }
+function polarTexture(gl, pole, layer, L) {
+  const key = pole + '|' + layer + '|' + L;
+  let t = polarTex.get(key);
+  if (t) return t;
+  t = { ready: false, tex: gl.createTexture() };
+  polarTex.set(key, t);
+  const T = 2 * POLAR_HALF / 2 ** L;                                   // metres per tile at this level
+  const colat = (90 - CAP_FROM + 0.6) * D2R, Rm = 2 * POLAR_R * Math.tan(colat / 2);
+  const c0 = Math.max(0, Math.floor((POLAR_HALF - Rm) / T)), c1 = Math.min(2 ** L - 1, Math.floor((POLAR_HALF + Rm) / T));
+  const n = c1 - c0 + 1, cv = document.createElement('canvas'); cv.width = cv.height = n * 256;
+  const cx = cv.getContext('2d');
+  t.x0 = c0 * T - POLAR_HALF; t.y0 = c0 * T - POLAR_HALF; t.size = n * T;
+  const P = pole > 0 ? 'NP' : 'SP', sfx = pole > 0 ? '_np' : '_sp', jobs = []; let got = 0;
+  for (let r = c0; r <= c1; r++) for (let c = c0; c <= c1; c++) {
+    jobs.push(fetch(`https://trek.nasa.gov/tiles/Mars/${P}/${layer}${sfx}/1.0.0/default/default028mm/${L}/${r}/${c}.png`, { mode: 'cors' })
+      .then(res => res.ok ? res.blob() : null).then(b => b && createImageBitmap(b))
+      .then(img => { if (img) { cx.drawImage(img, (c - c0) * 256, (r - c0) * 256); got++; } }).catch(() => {}));
+  }
+  Promise.all(jobs).then(() => {
+    if (!got) { setTimeout(() => polarTex.delete(key), 8000); return; }   // server unreachable: try again later
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    t.ready = true; map.triggerRepaint();
+  });
+  return t;
+}
+let marsPoleH = null;
+const marsCapLayer = {
+  id: 'mars-polar-caps', type: 'custom', renderingMode: '2d',
+  onAdd(m, gl) {
+    const vs = `
+      attribute vec2 a_pos;          // (longitude, |latitude|) in radians
+      uniform mat4 u_matrix; uniform float u_pole, u_r;
+      varying vec3 v_p;
+      void main() {
+        vec3 p = vec3(sin(a_pos.x) * cos(a_pos.y), u_pole * sin(a_pos.y), cos(a_pos.x) * cos(a_pos.y));
+        v_p = p; gl_Position = u_matrix * vec4(p * u_r, 1.0); gl_Position.z = 0.0;
+      }`;
+    const fs = `
+      precision highp float;
+      varying vec3 v_p;
+      uniform sampler2D u_tex; uniform vec4 u_plane; uniform float u_pole, u_r, u_R, u_x0, u_y0, u_size, u_from, u_full;
+      void main() {
+        vec3 p = normalize(v_p);
+        if (dot(p * u_r, u_plane.xyz) + u_plane.w < 0.0) discard;
+        float lat = asin(clamp(abs(p.y), 0.0, 1.0)), lng = atan(p.x, p.z);
+        float rho = 2.0 * u_R * tan((1.5707963 - lat) * 0.5);
+        vec2 xy = vec2(rho * sin(lng), u_pole * rho * cos(lng));
+        vec2 uv = (xy - vec2(u_x0, u_y0)) / u_size;
+        vec4 c = texture2D(u_tex, uv);
+        float a = c.a * smoothstep(u_from, u_full, degrees(lat));
+        if (a <= 0.003) discard;
+        gl_FragColor = vec4(c.rgb * a, a);
+      }`;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(o)); return o; };
+    const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog);
+    this.prog = prog;
+    const v = [], NA = 180, NB = 16, b0 = CAP_FROM * D2R;
+    for (let j = 0; j < NB; j++) {
+      const ba = b0 + (Math.PI / 2 - b0) * j / NB, bb = b0 + (Math.PI / 2 - b0) * (j + 1) / NB;
+      if (j) v.push(0, ba);                                     // degenerate join from the previous strip
+      for (let i = 0; i <= NA; i++) { const a = i / NA * Math.PI * 2; v.push(a, ba, a, bb); }
+      v.push(Math.PI * 2, bb);
+    }
+    this.count = v.length / 2;
+    this.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    const U = n => gl.getUniformLocation(prog, n);
+    this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), m: U('u_matrix'), tex: U('u_tex'), plane: U('u_plane'), pole: U('u_pole'), r: U('u_r'),
+      R: U('u_R'), x0: U('u_x0'), y0: U('u_y0'), size: U('u_size'), from: U('u_from'), full: U('u_full') };
+    if (typeof poleHeight === 'function') poleHeight().then(h => { marsPoleH = h; m.triggerRepaint(); });
+  },
+  render(gl, args) {
+    const tr = map.transform, vp = tr && tr._verticalPerspectiveTransform;
+    if (!vp || !(tr._globeness > 0.5) || !LAYERDEF(baseKey)) return;
+    const layer = polarLayerFor(baseKey), z = map.getZoom(), c = map.getCenter();
+    const L = this.loc, pl = vp._cachedClippingPlane;
+    gl.useProgram(this.prog);
+    gl.uniformMatrix4fv(L.m, false, args.defaultProjectionData.mainMatrix);
+    gl.uniform4f(L.plane, pl[0], pl[1], pl[2], pl[3]);
+    gl.uniform1f(L.R, POLAR_R); gl.uniform1f(L.from, CAP_FROM); gl.uniform1f(L.full, CAP_FULL);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.enableVertexAttribArray(L.pos); gl.vertexAttribPointer(L.pos, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.activeTexture(gl.TEXTURE0); gl.uniform1i(L.tex, 0);
+    const terr = map.getTerrain && map.getTerrain();
+    for (const pole of [1, -1]) {
+      const near = d3.geoDistance([c.lng, c.lat], [0, 90 * pole]) * R2D;
+      // pick the sharpest level that is loaded; ask for sharper ones only when zoomed in near this pole
+      const want = [3]; if (z >= 2.5 && near < 45) want.push(4); if (z >= 4.5 && near < 22) want.push(5);
+      let t = null;
+      for (const lv of want) { const tt = polarTexture(gl, pole, layer, lv); if (tt.ready) t = tt; }
+      if (!t) continue;
+      const h = terr && marsPoleH ? (pole > 0 ? marsPoleH.n : marsPoleH.s) + DEM_OFFSET : 0;
+      const r = 1 + (terr ? h * (terr.exaggeration || 1) / 6371008.8 : 0);
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.uniform1f(L.pole, pole); gl.uniform1f(L.r, r);
+      gl.uniform1f(L.x0, t.x0); gl.uniform1f(L.y0, t.y0); gl.uniform1f(L.size, t.size);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
+    }
+  }
+};
+if (MARS) map.on('load', () => { if (!map.getLayer('mars-polar-caps')) map.addLayer(marsCapLayer, map.getLayer('c-fill') ? 'c-fill' : undefined); });
 if (SATURN) {
   map.on('load', () => {
     if (!map.getLayer('saturn-npole')) map.addLayer(npoleLayer, 'c-fill');
