@@ -63,6 +63,21 @@
   .measure .hint{color:var(--muted)}
   .measure button{background:none;border:1px solid #4a362e;color:var(--text);border-radius:6px;padding:3px 8px;font:inherit;font-size:12px;cursor:pointer}
   .measure button:hover{border-color:var(--accent)}
+  .cmp{position:absolute;inset:0;z-index:30;background:rgba(8,5,4,.78);display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+  .cmp.on{display:flex}
+  .cmpbox{position:relative;background:#1d1411;border:1px solid var(--line);border-radius:14px;padding:18px 22px 14px;max-width:96vw;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+  .cmpbox h2{margin:0 30px 10px 0;font:600 17px/1.2 'Space Grotesk',system-ui,sans-serif;color:var(--text)}
+  .cmpbox h2 span{color:var(--muted);font-weight:500}
+  .cmpx{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:22px;cursor:pointer}
+  .cmpx:hover{color:var(--text)}
+  .cmprow{display:flex;align-items:flex-end;gap:clamp(14px,3vw,36px);justify-content:center}
+  .cmpw{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;background:none;border:0;color:var(--text);font:inherit;padding:6px;border-radius:10px}
+  .cmpw:hover{background:#2a1d18}
+  .cmpw.cur{outline:1px solid var(--accent)}
+  .cmpw canvas{display:block;border-radius:50%}
+  .cmpw b{font:600 14px/1 'Space Grotesk',system-ui,sans-serif}
+  .cmpw small{color:var(--muted);font-size:11.5px;line-height:1.35;text-align:center}
+  .cmpnote{margin:8px 0 0;color:var(--muted);font-size:12px;text-align:center}
   .toast{position:absolute;z-index:20;left:50%;top:14px;transform:translateX(-50%);background:#3a1e14;border:1px solid var(--accent);color:var(--text);padding:8px 14px;border-radius:9px;font-size:13px;display:none;max-width:90%}
   .search input{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:14px;outline:none}
   .search input:focus{border-color:var(--accent);background:rgba(255,255,255,.08)}
@@ -149,10 +164,19 @@
     <label><input type="checkbox" id="tNames" checked> Names</label>
     <label><input type="checkbox" id="tGrid"> Grid</label>
     <button id="clear">Clear all</button>
+    <button id="cmpBtn" title="Mars, the Moon and Europa side by side at their real sizes">Compare sizes</button>
   </div>
 </div>
 <div class="coords" id="coords"></div>
 <div class="toast" id="toast"></div>
+<div class="cmp" id="cmp" role="dialog" aria-label="Compare sizes">
+  <div class="cmpbox">
+    <button type="button" class="cmpx" id="cmpX" aria-label="Close">&times;</button>
+    <h2>Mars, the Moon and Europa <span>at their real sizes</span></h2>
+    <div class="cmprow" id="cmpRow"></div>
+    <p class="cmpnote">Click a world to open it.</p>
+  </div>
+</div>
 <div class="measure" id="measure"><span id="mText">Click on the map to start measuring</span><button type="button" id="mClear">Clear</button><button type="button" id="mDone" aria-label="Stop measuring">&times;</button></div>
 <div class="scale" id="scale"><div id="scaleBar"></div><span id="scaleTxt"></span></div>
 <div class="credit"><span id="baseCredit"></span> · tiles via <a id="trekLink" href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA Mars Trek</a> · Borders: Natural Earth</div>
@@ -998,6 +1022,79 @@ function save() {
     hirise: typeof showHirise === 'undefined' ? true : showHirise,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
+
+// ---------- compare sizes ----------
+// Mars, the Moon and Europa as small turning globes, drawn to scale (diameter ∝ radius) on canvases.
+// Each globe samples a small equirectangular texture (level 1 of its basemap: 1024 x 512 px).
+const WORLDS = [
+  { b: 'mars', name: 'Mars', r: 3389.5, tile: (r, c) => `https://trek.nasa.gov/tiles/Mars/EQ/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/1/${r}/${c}.jpg` },
+  { b: 'moon', name: 'The Moon', r: 1737.4, tile: (r, c) => `https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/1/${r}/${c}.jpg` },
+  { b: 'europa', name: 'Europa', r: 1560.8, tile: (r, c) => new URL(`europa-tiles/1/${r}/${c}.jpg`, location.href).href }
+];
+const cmpEl = document.getElementById('cmp');
+let cmpRaf = 0, cmpBuilt = null;
+function worldTexture(w) {
+  return w.tex || (w.tex = (async () => {
+    const cv = new OffscreenCanvas(1024, 512), cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.fillStyle = '#777'; cx.fillRect(0, 0, 1024, 512);
+    await Promise.all([0, 1].flatMap(r => [0, 1, 2, 3].map(c => fetch(w.tile(r, c), { mode: 'cors' })
+      .then(res => res.ok ? res.blob() : null).then(b => b && createImageBitmap(b))
+      .then(img => { if (img) cx.drawImage(img, c * 256, r * 256, 256, 256); }).catch(() => {}))));
+    return cx.getImageData(0, 0, 1024, 512).data;
+  })());
+}
+function buildCompare() {
+  const row = document.getElementById('cmpRow'); row.innerHTML = '';
+  const maxD = Math.min(300, Math.floor((innerWidth * 0.9 - 120) / (1 + 1737.4 / 3389.5 + 1560.8 / 3389.5)));
+  return WORLDS.map(w => {
+    const d = Math.max(24, Math.round(maxD * w.r / 3389.5)), dpr = Math.min(2, devicePixelRatio || 1), n = Math.round(d * dpr);
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'cmpw' + (w.b === BODY ? ' cur' : '');
+    const cv = document.createElement('canvas'); cv.width = cv.height = n; cv.style.width = cv.style.height = d + 'px';
+    const area = 4 * Math.PI * w.r * w.r;
+    btn.append(cv); btn.insertAdjacentHTML('beforeend', `<b>${w.name}</b><small>${Math.round(w.r * 2).toLocaleString('en')} km across<br>${(area / 1e6).toFixed(1)} M km² · ${Math.round(area / 37132).toLocaleString('en')}× the Netherlands</small>`);
+    btn.onclick = () => { if (w.b === BODY) { closeCompare(); return; } try { save(); } catch (e) {} location.href = location.pathname + '?body=' + w.b; };
+    row.append(btn);
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(n, n);
+    const st = { w, n, ctx, img, tex: null };
+    worldTexture(w).then(t => st.tex = t);
+    return st;
+  });
+}
+function drawGlobe(st, rot) {
+  const { n, img, tex } = st, d = img.data, R = n / 2, tilt = -0.25, ct = Math.cos(tilt), stl = Math.sin(tilt);
+  const lx = -0.55, ly = -0.35, lz = 0.76;            // light from the upper left
+  for (let y = 0; y < n; y++) {
+    const yy = (R - y - 0.5) / R;
+    for (let x = 0; x < n; x++) {
+      const k = (y * n + x) * 4, xx = (x + 0.5 - R) / R, q = xx * xx + yy * yy;
+      if (q > 1) { d[k + 3] = 0; continue; }
+      const zz = Math.sqrt(1 - q);
+      // undo the tilt (rotation about the screen x axis), then read latitude/longitude
+      const y2 = yy * ct - zz * stl, z2 = yy * stl + zz * ct;
+      const lat = Math.asin(Math.max(-1, Math.min(1, y2))), lon = Math.atan2(xx, z2) + rot;
+      let u = ((lon / (2 * Math.PI) + 0.5) % 1 + 1) % 1, v = 0.5 - lat / Math.PI;
+      const ti = (Math.min(511, (v * 512) | 0) * 1024 + Math.min(1023, (u * 1024) | 0)) * 4;
+      const sh = 0.35 + 0.65 * Math.max(0, xx * lx + yy * ly + zz * lz) + 0.08 * zz;
+      const edge = q > 0.96 ? (1 - q) / 0.04 : 1;    // soft limb
+      if (tex) { d[k] = tex[ti] * sh; d[k + 1] = tex[ti + 1] * sh; d[k + 2] = tex[ti + 2] * sh; }
+      else { d[k] = d[k + 1] = d[k + 2] = 90 * sh; }
+      d[k + 3] = 255 * edge;
+    }
+  }
+  st.ctx.putImageData(img, 0, 0);
+}
+function openCompare() {
+  cmpEl.classList.add('on');
+  cmpBuilt = buildCompare();
+  const t0 = performance.now();
+  const tick = t => { const rot = -1.2 + (t - t0) / 9000; cmpBuilt.forEach(st => drawGlobe(st, rot)); cmpRaf = requestAnimationFrame(tick); };
+  cmpRaf = requestAnimationFrame(tick);
+}
+function closeCompare() { cmpEl.classList.remove('on'); cancelAnimationFrame(cmpRaf); cmpBuilt = null; }
+document.getElementById('cmpBtn').onclick = openCompare;
+document.getElementById('cmpX').onclick = closeCompare;
+cmpEl.addEventListener('click', e => { if (e.target === cmpEl) closeCompare(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && cmpEl.classList.contains('on')) closeCompare(); });
 
 // ---------- measure tool ----------
 // Click to add points (distances along great circles, on Mars), click the first point to close a shape and get
