@@ -330,11 +330,11 @@ function showToast(t) {
 // ---------- elevation ----------
 // Esri's OnMars MDEM200M service: MOLA/HRSC blended DEM (200 m), LERC-compressed float tiles in a geographic grid.
 // The 'dem://' protocol samples them into Web Mercator terrarium-encoded tiles for MapLibre terrain.
-// Heights are measured from the floor of Hellas (≈ −8.2 km below the Mars datum), so the terrain never dips
-// below MapLibre's "sea level".
 // The Moon has no public tiled height service, so its heights are our own tiles (moon-dem/), made from
 // NASA's LRO LOLA 64-pixels-per-degree DEM (tools/build_moon_dem.py); deepest point ≈ −9.1 km.
-const DEM_OFFSET = MOON ? 9300 : 8300, DEM_MAXLEVEL = MOON ? 4 : 6;
+// Heights are used as they are (relative to each world's reference sphere). Lifting the whole surface by
+// many km made MapLibre's camera, markers and the draped imagery drift apart when zooming in.
+const DEM_OFFSET = 0, DEM_MAXLEVEL = MOON ? 4 : 6;
 const DEM_URL = (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/MDEM200M/ImageServer/tile/${z}/${r}/${c}`;
 let lercReady = null;
 const ensureLerc = () => lercReady || (lercReady = Lerc.load({ locateFile: f => 'https://cdn.jsdelivr.net/npm/lerc@4.3.0/' + f }));
@@ -1073,14 +1073,10 @@ map.on('load', () => {
     restoring = true;
     const restore = () => { saved.items.forEach(p => addCountry(p.n, p.la, p.lo, p.c, p.r)); colorIdx = saved.items.length; restoring = false; save(); };
     if (saved.items.some(p => /^[pc]:/.test(String(p.n)))) ensureProvinces().then(restore); else restore();
-  } else {
-    if (MOON) {
-      addCountry('Germany', 32.8, -15.6);                // inside Mare Imbrium
-      addCountry('Netherlands', 9.6, -24.5);             // beside Copernicus
-    } else {
-      addCountry('United States of America', -12, -62);   // over Valles Marineris
-      addCountry('Netherlands', 18.65, -133.8);            // on Olympus Mons
-    }
+  } else if (!MOON && !new URLSearchParams(location.search).has('body')) {
+    // only a first-time visitor to Mars gets two examples; a world you switch to starts empty
+    addCountry('United States of America', -12, -62);   // over Valles Marineris
+    addCountry('Netherlands', 18.65, -133.8);            // on Olympus Mons
   }
   renderList();
 });
