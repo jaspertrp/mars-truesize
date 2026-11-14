@@ -138,6 +138,7 @@
   .drivebtn{display:none;margin:0 16px 10px;width:calc(100% - 32px);padding:8px 10px;border-radius:9px;border:1px solid var(--accent);background:rgba(255,138,76,.12);color:var(--text);font:600 13px/1 'Space Grotesk',system-ui,sans-serif;cursor:pointer}
   .drivebtn:hover{background:rgba(255,138,76,.25)}
   #flyBtn{display:block}
+  #flyBtn.picking{background:var(--accent);color:#1a1210}
   body.driving .panel,body.driving .maplibregl-ctrl-top-right,body.driving .coords,body.driving .measure,body.driving .feat,body.driving .site{display:none!important}
   .hud{display:none;position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--text);font-size:12.5px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:calc(100% - 20px)}
   body.driving .hud{display:block}
@@ -1389,7 +1390,7 @@ map.on('mousemove', 'c-fill', e => {
 map.on('mouseleave', 'c-fill', () => { if (!drag) { map.getCanvas().style.cursor = ''; popup.remove(); } });
 
 function startDrag(e) {
-  if (measuring) return;
+  if (measuring || (typeof jetPick !== 'undefined' && jetPick)) return;
   const oe = e.originalEvent;
   // leave right-drag, Ctrl/⌘-drag and multi-finger gestures to the map (tilt / rotate)
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
@@ -2240,6 +2241,8 @@ function spaceTexture(gl, bm) {
   });
   return t;
 }
+const SPACE_HAZE = (MOON || EUROPA ? [0.04, 0.04, 0.05] : JUPITER ? [0.79, 0.69, 0.55] : SATURN ? [0.89, 0.81, 0.62] : [0.90, 0.78, 0.64]);
+const SPACE_SKY = (MOON || EUROPA ? [0, 0, 0] : JUPITER ? [0.11, 0.10, 0.14] : SATURN ? [0.09, 0.09, 0.11] : [0.73, 0.55, 0.41]);
 const R_EQ_M = R_BODY * 1000;   // equatorial radius in metres (the unit of the ray tracer)
 const spaceLayer = {
   id: 'space-view', type: 'custom', renderingMode: '3d',
@@ -2252,6 +2255,8 @@ const spaceLayer = {
       varying vec3 v_dir;
       uniform vec3 u_o;                    // camera position, in equatorial radii (y = spin axis)
       uniform vec3 u_up;                   // local vertical at the jet
+      uniform vec3 u_haze, u_skytop;        // the map's horizon and sky colours
+      uniform float u_dip;                 // how far the true horizon lies below eye level
       uniform float u_q, u_w, u_rings, u_rin, u_rout, u_hasPlanet;
       uniform sampler2D u_planet, u_ring;
       void main() {
@@ -2260,7 +2265,12 @@ const spaceLayer = {
         vec3 os = vec3(o.x, o.y / u_q, o.z), ds = vec3(d.x, d.y / u_q, d.z);
         float a = dot(ds, ds), b = dot(os, ds), c = dot(os, os) - 1.0, h = b * b - a * c, tp = -1.0;
         if (h > 0.0) { tp = (-b - sqrt(h)) / a; }
-        vec4 col = vec4(0.0, 0.0, 0.0, u_w);                       // black space, as strong as the planet
+        // Wherever the ray misses the planet we paint our own sky: the flat map has no horizon dip, so its own sky and
+        // horizon sit too high (and it shows ground where the real planet has already curved away). Haze glows at the
+        // true horizon and fades upward into the dark sky, and everything turns to black space as you climb.
+        float eh = asin(clamp(dot(d, u_up), -1.0, 1.0)) + u_dip;     // angle above the true horizon
+        vec3 sky = mix(u_haze, u_skytop, smoothstep(0.0, 0.35, eh));
+        vec4 col = vec4(mix(sky, vec3(0.0), u_w), 1.0);
         if (tp > 0.0) {
           vec3 p = normalize(os + tp * ds);
           float beta = asin(clamp(p.y, -0.9985, 0.9985)), lng = atan(p.x, p.z);
@@ -2277,8 +2287,6 @@ const spaceLayer = {
             if (r > u_rin && r < u_rout) {
               vec4 rt = texture2D(u_ring, vec2((r - u_rin) / (u_rout - u_rin), 0.5));
               float al = 1.0 - exp(-rt.a * 6.0 / max(abs(d.y), 0.02));
-              // below eye level the flat map shows ground (it has no horizon dip), so the rings must not show through it
-              if (dot(d, u_up) < 0.0) al *= u_w;
               col = vec4(rt.rgb * al, al) + col * (1.0 - al);
             }
           }
@@ -2301,14 +2309,13 @@ const spaceLayer = {
     }
     const U = nm => gl.getUniformLocation(prog, nm);
     this.loc = { pos: gl.getAttribLocation(prog, 'a_pos'), o: U('u_o'), d00: U('u_d00'), d10: U('u_d10'), d01: U('u_d01'), d11: U('u_d11'),
-      q: U('u_q'), w: U('u_w'), up: U('u_up'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
+      q: U('u_q'), w: U('u_w'), up: U('u_up'), haze: U('u_haze'), skytop: U('u_skytop'), dip: U('u_dip'), rings: U('u_rings'), rin: U('u_rin'), rout: U('u_rout'), has: U('u_hasPlanet'), planet: U('u_planet'), ring: U('u_ring') };
   },
   render(gl, args) {
     const V = FL.on && FL.view;
     if (!V || !THREE) return;
     const hEq = V.agl / R_EQ_M, w = Math.min(1, Math.max(0, (hEq - 0.008) / (0.04 - 0.008)));
     const rings = SATURN && ringsOn;
-    if (w <= 0 && !rings) return;
     // camera position on the (squashed) planet: map latitude = reduced latitude
     const lam = V.lng * D2R, be = V.lat * D2R, cb = Math.cos(be), sb = Math.sin(be);
     const sx = Math.sin(lam), cz = Math.cos(lam);
@@ -2328,7 +2335,7 @@ const spaceLayer = {
     const D = D0.map(p => toW([p[0] * sc, p[1] * sc, p[2] * sc]));
     const L = this.loc, pt = w > 0 ? spaceTexture(gl, baseKey) : null;
     gl.useProgram(this.prog);
-    gl.uniform3f(L.o, ...o); gl.uniform3f(L.d00, ...D[0]); gl.uniform3f(L.d10, ...D[1]); gl.uniform3f(L.d01, ...D[2]); gl.uniform3f(L.d11, ...D[3]); gl.uniform3f(L.up, ...nrm);
+    gl.uniform3f(L.o, ...o); gl.uniform3f(L.d00, ...D[0]); gl.uniform3f(L.d10, ...D[1]); gl.uniform3f(L.d01, ...D[2]); gl.uniform3f(L.d11, ...D[3]); gl.uniform3f(L.up, ...nrm); gl.uniform3f(L.haze, ...SPACE_HAZE); gl.uniform3f(L.skytop, ...SPACE_SKY); gl.uniform1f(L.dip, Math.acos(Math.min(1, 1 / (1 + V.agl / R_EQ_M))));
     gl.uniform1f(L.q, Q); gl.uniform1f(L.w, w);
     gl.uniform1f(L.rings, rings ? 1 : 0); gl.uniform1f(L.rin, SATURN ? RING_IN : 0); gl.uniform1f(L.rout, SATURN ? RING_OUT : 0);
     gl.uniform1f(L.has, pt && pt.ready ? 1 : 0);
@@ -2538,7 +2545,7 @@ function flyKey(e) {
 document.addEventListener('keydown', flyKey); document.addEventListener('keyup', flyKey);
 window.addEventListener('blur', () => { FL.keys = {}; });
 
-async function startFly() {
+async function startFly(at) {
   if (FL.on || BG.on) return;
   if (!THREE) {
     flyBtn.disabled = true; flyBtn.textContent = 'Fuelling the jet…';
@@ -2565,7 +2572,7 @@ async function startFly() {
   // take off from where you are looking, or over a landmark of each world when zoomed out
   const TAKEOFF = MOON ? [-2.5, 19.5, 20, 'the Montes Apenninus'] : EUROPA ? [86.3, 9.7, 90, 'Conamara Chaos']
     : JUPITER ? [-62, -22, 90, 'the Great Red Spot'] : SATURN ? [-60, 33, 90, 'the band of the 2010–11 great storm'] : [-70, -8, 90, 'Valles Marineris'];
-  const here = map.getZoom() >= 6, start = here ? map.getCenter() : new maplibregl.LngLat(TAKEOFF[0], GIANT ? toMapLat(TAKEOFF[1]) : TAKEOFF[1]);
+  const here = !!at || map.getZoom() >= 6, start = at ? at : here ? map.getCenter() : new maplibregl.LngLat(TAKEOFF[0], GIANT ? toMapLat(TAKEOFF[1]) : TAKEOFF[1]);
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : TAKEOFF[2];
   let g0 = null; try { g0 = map.queryTerrainElevation(start); } catch (e) {}
   Object.assign(FL, { on: true, mx: mc.x, my: mc.y, g: g0 || 0, alt: (g0 || 0) + 1200 * BODY_SCALE * JV, v: (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * FL.M, thr: 0.6,
@@ -2597,7 +2604,19 @@ function stopFly() {
   map.once('moveend', () => { map.setMaxPitch(jetPrev.maxPitch); map.setMaxZoom(jetPrev.maxZoom); });
   map.triggerRepaint();
 }
-flyBtn.onclick = startFly;
+// the button drops the jet where you click next: pan and zoom as usual, then click a spot (Esc or the button cancels)
+let jetPick = false;
+function setJetPick(on) {
+  jetPick = on;
+  flyBtn.innerHTML = on ? '&#9992;&#65039; Click the map to drop the jet… (Esc cancels)' : FLY_LABEL;
+  flyBtn.classList.toggle('picking', on);
+  map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  if (on) { if (measuring) setMeasuring(false); showToast('Click anywhere on the map to drop the jet there'); }
+}
+flyBtn.onclick = () => { if (!FL.on && !BG.on) setJetPick(!jetPick); };
+map.on('click', e => { if (!jetPick) return; setJetPick(false); startFly(e.lngLat); });
+map.on('mousemove', () => { if (jetPick) map.getCanvas().style.cursor = 'crosshair'; });
+document.addEventListener('keydown', e => { if (jetPick && e.key === 'Escape') setJetPick(false); });
 document.getElementById('jExit').onclick = stopFly;
 
 map.on('load', () => {
