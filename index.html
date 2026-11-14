@@ -56,9 +56,6 @@
   .terr .exag.on{opacity:1;pointer-events:auto}
   .terr .exag input{flex:1;accent-color:var(--accent);min-width:60px}
   .terr .exag span{width:30px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
-  .basesel .mcol{display:none;align-items:center;gap:5px;color:var(--text);cursor:pointer;white-space:nowrap}
-  .basesel .mcol.on{display:flex}
-  .basesel .mcol input{accent-color:var(--accent);margin:0}
   .basesel select{flex:1;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:13px}
   .measure{position:absolute;z-index:15;left:50%;bottom:34px;transform:translateX(-50%);background:var(--panel,#1c1210);border:1px solid var(--accent);color:var(--text);padding:7px 8px 7px 14px;border-radius:9px;font-size:13px;display:none;align-items:center;gap:10px;max-width:92%;box-shadow:0 4px 16px rgba(0,0,0,.35)}
   .measure.on{display:flex}
@@ -189,7 +186,7 @@
     <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button><button type="button" data-b="saturn">Saturn</button></div>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
-  <div class="basesel"><label for="base">Basemap</label><select id="base"></select><label class="mcol" id="mcolWrap" title="The CTX, THEMIS and HiRISE images are black and white; this colours them from the Viking colour mosaic"><input type="checkbox" id="tColour"> Colour</label></div>
+  <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
   <div class="terr hir">
     <label class="tog"><input type="checkbox" id="tHirise" checked> HiRISE detail</label>
     <select id="site"><option value="">Fly to a landing site…</option></select>
@@ -413,7 +410,7 @@ const failures = {};
 // The CTX, THEMIS and HiRISE images are black and white. With "Mars colour" on, each of their tiles takes its
 // colour from the same spot in the Viking colour mosaic (232 m) and keeps its own detail as brightness
 // (a ratio "pan-sharpen"). Where Viking can't be reached, a plain Mars colour ramp is used instead.
-let marsColour = !(saved && saved.colour === false);
+let marsColour = !!(saved && saved.tint === true);   // grey by default; type "red" / "grey" in the search box to switch
 const lum = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
 const RAMP = [[0, [26, 15, 10]], [0.45, [146, 88, 55]], [0.75, [205, 150, 105]], [1, [240, 205, 170]]];
 function rampColour(t) {
@@ -1305,25 +1302,19 @@ function setBase(k, auto) {
   if (!auto) { wantedBase = k; fellBack = false; }
   baseKey = k; baseSel.value = k; failures[k] = 0;
   for (const kk of Object.keys(BASEMAPS)) if (map.getLayer('base-' + kk)) map.setLayoutProperty('base-' + kk, 'visibility', kk === k || kk === BASEMAPS[k].under ? 'visible' : 'none');
-  updateCredit(); if (typeof syncColourToggle === 'function') syncColourToggle();
+  updateCredit();
   save();
 }
 baseSel.onchange = () => setBase(baseSel.value);
-// "Colour" shows on Mars when a black-and-white layer is in view (CTX, THEMIS, or the HiRISE overlay)
-const tColour = document.getElementById('tColour'), mcolWrap = document.getElementById('mcolWrap');
-tColour.checked = marsColour;
-function syncColourToggle() {
-  let hir = false; try { hir = showHirise; } catch (e) {}
-  document.getElementById('mcolWrap').classList.toggle('on', MARS && (!!BASEMAPS[baseKey]?.grey || hir));
-}
-tColour.onchange = () => {
-  marsColour = tColour.checked;
+// Mars colour has no button: typing "red" or "grey" in the search box switches it (see the cheat words)
+function setMarsColour(on) {
+  marsColour = on;
   for (const k of [...Object.keys(BASEMAPS), 'hirise']) {
     const id = k === 'hirise' ? 'ov-hirise' : 'base-' + k, src = map.getSource(id);
     if (LAYERDEF(k).grey && src && src.setTiles) src.setTiles([eqUrl(k)]);
   }
   save();
-};
+}
 
 // ---------- hide labels that are over the horizon or far outside the view ----------
 // (on the globe MapLibre can otherwise draw far-side markers in odd places when zoomed in)
@@ -1345,8 +1336,7 @@ const tHirise = document.getElementById('tHirise');
 if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
 function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
-tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); syncColourToggle(); save(); };
-syncColourToggle();
+tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
   const extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
@@ -1399,7 +1389,7 @@ function save() {
   if (restoring) return;
   try { localStorage.setItem(KEY, JSON.stringify({ proj, base: typeof wantedBase === 'undefined' ? DEFAULT_BASE : wantedBase, v: 4, items: placed.map(p => ({ n: p.key, c: p.color, la: p.lat, lo: p.lon, r: p.rot || 0 })),
     names: typeof showNames === 'undefined' ? true : showNames,
-    hirise: typeof showHirise === 'undefined' ? true : showHirise, colour: typeof marsColour === 'undefined' ? true : marsColour,
+    hirise: typeof showHirise === 'undefined' ? true : showHirise, tint: typeof marsColour === 'undefined' ? false : marsColour,
     terrain: typeof terrainOn === 'undefined' ? false : terrainOn, exag: typeof exag === 'undefined' ? 1 : exag })); } catch (e) {}
 }
 
@@ -1577,7 +1567,7 @@ try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includ
 let THREE = null, buggyLayer = null, buggyPrev = null;
 const driveBtn = document.getElementById('driveBtn'), hudEl = document.getElementById('hud');
 const DRIVE_LABEL = MOON ? '&#128665; Drive the moon buggy' : '&#128665; Drive a buggy on Mars';
-if (HAS_TERRAIN) { driveBtn.style.display = 'block'; driveBtn.innerHTML = DRIVE_LABEL; }
+driveBtn.innerHTML = DRIVE_LABEL;   // hidden: type "drive" in the search box to start (see the cheat words below)
 const wrap180 = a => ((a + 540) % 360) - 180;
 
 function buildBuggy() {
@@ -1909,7 +1899,38 @@ const FL = { on: false, M: 1, keys: {}, camMode: 0, invert: false };
 try { const m = +localStorage.getItem('jet-speed'); if ([1, 5, 25].includes(m)) FL.M = m; FL.invert = localStorage.getItem('jet-invert') === '1'; } catch (e) {}
 let jetLayer = null, jetPrev = null;
 const flyBtn = document.getElementById('flyBtn'), FLY_LABEL = '&#9992;&#65039; Fly a fighter jet';
-if (HAS_TERRAIN) flyBtn.style.display = 'block';
+// hidden: type "fly" in the search box to start
+// ---------- cheat words ----------
+// The vehicles have no buttons, to keep the map clean: typing "drive" or "fly" in the
+// "Add a country…" box starts them (on worlds with 3D terrain); "red" and "grey" colour or uncolour the
+// black-and-white Mars images (CTX, THEMIS, HiRISE).
+// A word fires as soon as it is typed, unless a place name starts with it too (e.g. "Red Sea"):
+// then it waits for Enter, so you can still search for that place.
+function cheat(w) {
+  if (w === 'red' || w === 'grey' || w === 'gray') {
+    q.value = ''; sugg.style.display = 'none'; q.blur();
+    if (!MARS) { showToast('Red and grey switch the colour of the Mars close-up images'); return; }
+    setMarsColour(w === 'red');
+    showToast(w === 'red' ? 'Close-up images (CTX, THEMIS, HiRISE) coloured from Viking' : 'Close-up images back to their original grey');
+    return;
+  }
+  const go = w === 'drive' ? startDrive : w === 'fly' ? startFly : null;
+  if (!go) return;
+  q.value = ''; sugg.style.display = 'none'; q.blur();
+  if (!HAS_TERRAIN) { showToast('There is no ground to ' + w + ' on here'); return; }
+  go();
+  return true;
+}
+const CHEATS = ['drive', 'fly', 'red', 'grey', 'gray'];
+const placeStartsWith = w => (typeof matches !== 'undefined' ? matches : []).some(c => c.name.toLowerCase() !== w && c.name.toLowerCase().startsWith(w));
+q.addEventListener('input', () => {
+  const w = q.value.trim().toLowerCase();
+  if (CHEATS.includes(w) && !placeStartsWith(w)) cheat(w);
+});
+q.addEventListener('keydown', e => {
+  const w = q.value.trim().toLowerCase();
+  if (e.key === 'Enter' && CHEATS.includes(w)) { e.preventDefault(); e.stopImmediatePropagation(); cheat(w); }
+}, true);
 
 function buildJet() {
   const T = THREE, g = new T.Group();

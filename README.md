@@ -17,7 +17,7 @@ Each country is redrawn at its true dimensions in kilometres. Mars has about hal
 | HiRISE overlay (fades in from zoom 11 where images exist, mostly landing sites) | ~25 cm | NASA/JPL/University of Arizona/USGS/Esri |
 | Classic (8k texture, bundled in `tiles/`) | ~2.6 km | [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0 |
 
-CTX, THEMIS and HiRISE are black-and-white cameras. With **Colour** on (next to the basemap menu; on by default), their tiles take their colour from the same spot in the Viking colour mosaic and keep their own detail as brightness (a ratio pan-sharpen, with the tile's brightness matched to Viking); where Viking can't be reached, a Mars colour ramp is used. Turn it off to see the original greys.
+CTX, THEMIS and HiRISE are black-and-white cameras. They show in their original grey; type **red** in the *Add a country…* box and their tiles take their colour from the same spot in the Viking colour mosaic and keep their own detail as brightness (a ratio pan-sharpen, with the tile's brightness matched to Viking); where Viking can't be reached, a Mars colour ramp is used. Type **grey** to switch back.
 
 The first four are streamed from [NASA Mars Trek](https://trek.nasa.gov/mars/) and Esri's OnMars service. Both serve tiles in a geographic (equirectangular) grid, and the page reprojects them to Web Mercator in the browser through a custom MapLibre protocol (`eq://`). If a tile server can't be reached, the map falls back to the bundled Classic tiles.
 
@@ -41,7 +41,7 @@ countries and settings. Moon imagery comes from NASA Moon Trek (LRO WAC, LOLA re
 3D heights are the tiles in `moon-dem/`, made with `tools/build_moon_dem.py` from NASA's LRO LOLA 64 px/degree
 DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
 
-**Drive a buggy:** on the Moon and on Mars, the *Drive* button puts an Apollo Lunar Roving Vehicle on the 3D
+**Drive a buggy:** on the Moon and on Mars, typing **drive** in the *Add a country…* box puts an Apollo Lunar Roving Vehicle on the 3D
 terrain (a three.js model in a MapLibre custom layer, loaded only when you start driving). It starts where you are
 looking, or at Apollo 15 (Moon) / Jezero Crater (Mars) when zoomed out. Arrow keys or WASD to drive, Shift to boost,
 1–4 for top speed (1×, 4×, 15×, 50× the real LRV's 13 km/h), Space to hop, C to change camera, Esc to stop. It drives
@@ -49,7 +49,7 @@ in the world's own gravity (Moon 1.62 m/s², Mars 3.72 m/s²), kicks up dust and
 real-size strips on the ground so they keep their width at every zoom. *Size* draws it 1×, 10× or 40× real size.
 The Moon's ground is the LOLA DEM (~470 m per pixel), so small craters are in the photo but not in the heights.
 
-**Fly a fighter jet:** the *Fly* button (Moon and Mars) puts a generic twin-tail fighter, at true size, 1.2 km above
+**Fly a fighter jet:** typing **fly** in the *Add a country…* box (Moon and Mars) puts a generic twin-tail fighter, at true size, 1.2 km above
 where you are looking, or over the Montes Apenninus / Valles Marineris when zoomed out. Arrow keys pitch and roll
 (like a flight stick; the HUD button or I swaps up and down), A/D rudder, W/S throttle, Shift afterburner, 1–3 speed
 class (1×, 5×, 25×: up to about 68,000 km/h), C for chase, far chase and cockpit views, Esc to land. Banking turns the
