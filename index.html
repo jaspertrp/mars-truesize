@@ -2137,6 +2137,9 @@ document.getElementById('hExit').onclick = stopDrive;
 // Arcade flight: the stick pitches and rolls the jet in its own frame, banking turns it, the afterburner
 // more than doubles the speed, and the speed class multiplies everything (25× crosses the Moon in minutes).
 // The world's gravity costs speed in a climb and gives it back in a dive. Touching the ground is a crash.
+// On the gas giants a true-size jet is a speck the camera can't get close enough to, so it is drawn (and
+// followed) JV times bigger there; its speed and altitude readouts stay true.
+const JV = GIANT ? Math.round(1 / BODY_SCALE) : 1;
 const JET = { len: 19, vmin: 70, vmax: 420, vab: 760 };     // m/s: 250, 1,500 and 2,700 km/h at speed class 1×
 const FL = { on: false, M: 1, keys: {}, camMode: 0, invert: false };
 try { const m = +localStorage.getItem('jet-speed'); if ([1, 5, 25].includes(m)) FL.M = m; FL.invert = localStorage.getItem('jet-invert') === '1'; } catch (e) {}
@@ -2215,7 +2218,7 @@ function makeJetLayer() {
   scene.add(new T.HemisphereLight(0xffffff, 0x555555, 1.0));
   const sun = new T.DirectionalLight(0xffffff, 2.4); sun.position.set(0.5, 0.4, 0.8); scene.add(sun);
   const jet = buildJet(), holder = new T.Group(); holder.add(jet.g); scene.add(holder);
-  holder.scale.setScalar(BODY_SCALE);
+  holder.scale.setScalar(BODY_SCALE * JV);
   const boom = [], bgeo = new T.IcosahedronGeometry(1, 1);
   for (let i = 0; i < 70; i++) {
     const m = new T.Mesh(bgeo, new T.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0, depthWrite: false }));
@@ -2275,7 +2278,7 @@ function flyStep(t) {
   if (FL.crashT > 0) {                                  // wreck: wait, then a fresh jet 1.5 km above the ground
     FL.crashT -= dt;
     if (FL.crashT <= 0) {
-      FL.alt = (FL.g || 0) + 1500 * BS; FL.v = (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * M; FL.thr = 0.6;
+      FL.alt = (FL.g || 0) + 1500 * BS * JV; FL.v = (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * M; FL.thr = 0.6;
       FL.q.setFromAxisAngle(new T.Vector3(0, 0, 1), -FL.heading * D2R); FL.jet.g.visible = true;
     }
   } else {
@@ -2310,7 +2313,7 @@ function flyStep(t) {
     const ll = new maplibregl.MercatorCoordinate(FL.mx, FL.my, 0).toLngLat(), g = qElev([wrapLon(ll.lng), ll.lat]);
     if (g != null) FL.g = g;
     const agl = FL.alt - (FL.g || 0);
-    if (agl < 1.5 * BS) {
+    if (agl < 1.5 * BS * JV) {
       FL.crashT = 2.6; FL.v = 0; FL.alt = (FL.g || 0) + 1.5 * BS; FL.jet.g.visible = false; jetBoom();
       showToast(GIANT ? 'Lost in the clouds! New jet in a moment…' : 'Crashed! New jet in a moment…');
     }
@@ -2338,16 +2341,16 @@ function flyStep(t) {
   try {
     if (FL.camMode === 2 && FL.crashT <= 0) {           // cockpit
       const f = new T.Vector3(0, 1, 0).applyQuaternion(FL.q), u = new T.Vector3(0, 0, 1).applyQuaternion(FL.q);
-      const eye = new T.Vector3().addScaledVector(f, 6 * BS).addScaledVector(u, 1.6 * BS), look = eye.clone().addScaledVector(f, 2000 * BS);
+      const eye = new T.Vector3().addScaledVector(f, 6 * BS * JV).addScaledVector(u, 1.6 * BS * JV), look = eye.clone().addScaledVector(f, 2000 * BS);
       opts = map.calculateCameraOptionsFromTo(at(eye.x, eye.y), FL.alt + eye.z, at(look.x, look.y), FL.alt + look.z);
       opts.roll = FL.bank * R2D;
     } else {
       const far = FL.camMode === 1, speedPull = 1 + 0.5 * Math.log2(1 + FL.v / (JET.vmax * M));
-      const D = (far ? 220 : 50) * BS * speedPull, el = (far ? 22 : 11) * D2R, yaw = FL.camYaw * D2R;
+      const D = (far ? 220 : 50) * BS * JV * speedPull, el = (far ? 22 : 11) * D2R, yaw = FL.camYaw * D2R;
       const e = -Math.sin(yaw) * D * Math.cos(el), n = -Math.cos(yaw) * D * Math.cos(el);
       const camLL = at(e, n), camG = qElev([wrapLon(camLL[0]), camLL[1]]);
       let camAlt = FL.alt + D * Math.sin(el);
-      if (camG != null) camAlt = Math.max(camAlt, camG + 12 * BS);
+      if (camG != null) camAlt = Math.max(camAlt, camG + 12 * BS * JV);
       opts = map.calculateCameraOptionsFromTo(camLL, camAlt, [pos.lng, pos.lat], FL.alt);
       if (opts.zoom > MAXSIMZOOM) {                     // too close for MapLibre: back off along the same line
         const f = 2 ** (opts.zoom - MAXSIMZOOM), e2 = e * f, n2 = n * f;
@@ -2416,7 +2419,7 @@ async function startFly() {
   const here = map.getZoom() >= 6, start = here ? map.getCenter() : new maplibregl.LngLat(TAKEOFF[0], GIANT ? toMapLat(TAKEOFF[1]) : TAKEOFF[1]);
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : TAKEOFF[2];
   let g0 = null; try { g0 = map.queryTerrainElevation(start); } catch (e) {}
-  Object.assign(FL, { on: true, mx: mc.x, my: mc.y, g: g0 || 0, alt: (g0 || 0) + 1200 * BODY_SCALE, v: (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * FL.M, thr: 0.6,
+  Object.assign(FL, { on: true, mx: mc.x, my: mc.y, g: g0 || 0, alt: (g0 || 0) + 1200 * BODY_SCALE * JV, v: (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * FL.M, thr: 0.6,
     heading, camYaw: heading, pr: 0, rr: 0, yr: 0, bank: 0, crashT: 0, keys: {}, t: 0, camMode: 0 });
   FL.q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -heading * D2R);
   FL.jet.g.visible = true; FL.boom.forEach(d => { d.life = 0; d.m.visible = false; });
