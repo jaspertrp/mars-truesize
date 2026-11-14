@@ -341,7 +341,7 @@ const JUPITER_BASEMAPS = {
 // strips hidden by the rings filled from neighbouring latitudes, and the north polar cap (hexagon) from Cassini's
 // natural-colour polar mosaic of June 2013 (PIA21611). Made by tools/build_saturn_map.py, cut into saturn-tiles/.
 const SATURN_BASEMAPS = {
-  cassini: { label: 'Cassini colour (2011 + hexagon 2013)', ts: 256, max: 5, out: 'image/jpeg', bg: '#d9c19a',
+  cassini: { label: 'Cassini colour (2011, 2013)', ts: 256, max: 5, out: 'image/jpeg', bg: '#d9c19a',
     url: (z, r, c) => new URL(`saturn-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Cassini ISS colour map, 11 Aug 2011: NASA/JPL-Caltech/SSI, L. Li et al. (PDS) · north pole: PIA21611, June 2013, NASA/JPL-Caltech/SSI/Hampton University · ring profile: Cassini RSS (PDS Rings)' }
 };
