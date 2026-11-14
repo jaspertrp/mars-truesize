@@ -31,3 +31,10 @@ Country borders come from [Natural Earth](https://www.naturalearthdata.com/) via
 For each country the page computes its spherical centroid on Earth. It then stores every vertex as a (great-circle distance, bearing) pair from that centroid. When you drop or drag the country, each vertex is placed at the same bearing from the new centre on Mars, with its distance multiplied by 6371 / 3389.5. That keeps distances from the centre and directions true. Rotating a country (Shift/Alt-drag it) simply adds an angle to every bearing. Countries can be dragged anywhere, including over the poles: d3-geo cuts each placed shape at the antimeridian and closes it over a pole when the shape covers one, so it renders correctly on both the flat map and the globe.
 
 Built with [MapLibre GL JS](https://maplibre.org/) (globe projection), d3-geo and topojson-client.
+
+## The Moon
+
+Switch between Mars and the Moon at the top of the panel (or open `?body=moon`). Each world keeps its own
+countries and settings. Moon imagery comes from NASA Moon Trek (LRO WAC, LOLA relief, Kaguya TC). The Moon's
+3D heights are the tiles in `moon-dem/`, made with `tools/build_moon_dem.py` from NASA's LRO LOLA 64 px/degree
+DEM (heights in half-metres + 20000, stored as R/G bytes in lossless WebP).
