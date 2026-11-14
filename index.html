@@ -137,6 +137,7 @@
   /* ---------- moon buggy ---------- */
   .drivebtn{display:none;margin:0 16px 10px;width:calc(100% - 32px);padding:8px 10px;border-radius:9px;border:1px solid var(--accent);background:rgba(255,138,76,.12);color:var(--text);font:600 13px/1 'Space Grotesk',system-ui,sans-serif;cursor:pointer}
   .drivebtn:hover{background:rgba(255,138,76,.25)}
+  #flyBtn{display:block}
   body.driving .panel,body.driving .maplibregl-ctrl-top-right,body.driving .coords,body.driving .measure,body.driving .feat,body.driving .site{display:none!important}
   .hud{display:none;position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--text);font-size:12.5px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:calc(100% - 20px)}
   body.driving .hud{display:block}
@@ -197,7 +198,7 @@
   </div>
   <button type="button" class="drivebtn" id="ringBtn" title="Fly to a view where the rings are open">&#129680; View the rings</button>
   <button type="button" class="drivebtn" id="driveBtn" title="Drive a lunar roving vehicle over the 3D terrain">&#128665; Drive the moon buggy</button>
-  <button type="button" class="drivebtn" id="flyBtn" title="Fly a fighter jet low and fast over the 3D terrain">&#9992;&#65039; Fly a fighter jet</button>
+  <button type="button" class="drivebtn" id="flyBtn" title="Fly a fighter jet low and fast over the surface">&#9992;&#65039; Fly a fighter jet</button>
   <div class="search">
     <input id="q" type="text" placeholder="Add a country, province or continent…" autocomplete="off" spellcheck="false">
     <div class="sugg" id="sugg"></div>
@@ -2141,9 +2142,9 @@ const FL = { on: false, M: 1, keys: {}, camMode: 0, invert: false };
 try { const m = +localStorage.getItem('jet-speed'); if ([1, 5, 25].includes(m)) FL.M = m; FL.invert = localStorage.getItem('jet-invert') === '1'; } catch (e) {}
 let jetLayer = null, jetPrev = null;
 const flyBtn = document.getElementById('flyBtn'), FLY_LABEL = '&#9992;&#65039; Fly a fighter jet';
-// hidden: type "fly" in the search box to start
+// in the menu on every world (typing "fly" in the search box works too)
 // ---------- cheat words ----------
-// The vehicles have no buttons, to keep the map clean: typing "drive" or "fly" in the
+// The buggy has no button, to keep the map clean (the jet has one): typing "drive" or "fly" in the
 // "Add a country…" box starts them (on worlds with 3D terrain); "red" and "grey" colour or uncolour the
 // black-and-white Mars images (CTX, THEMIS, HiRISE).
 // A word fires as soon as it is typed, unless a place name starts with it too (e.g. "Red Sea"):
@@ -2159,7 +2160,7 @@ function cheat(w) {
   const go = w === 'drive' ? startDrive : w === 'fly' ? startFly : null;
   if (!go) return;
   q.value = ''; sugg.style.display = 'none'; q.blur();
-  if (!HAS_TERRAIN) { showToast('There is no ground to ' + w + ' on here'); return; }
+  if (!HAS_TERRAIN && w === 'drive') { showToast('There is no ground to drive on here'); return; }
   go();
   return true;
 }
@@ -2311,7 +2312,7 @@ function flyStep(t) {
     const agl = FL.alt - (FL.g || 0);
     if (agl < 1.5 * BS) {
       FL.crashT = 2.6; FL.v = 0; FL.alt = (FL.g || 0) + 1.5 * BS; FL.jet.g.visible = false; jetBoom();
-      showToast('Crashed! New jet in a moment…');
+      showToast(GIANT ? 'Lost in the clouds! New jet in a moment…' : 'Crashed! New jet in a moment…');
     }
     const sink = -f.z * FL.v * BS;
     document.getElementById('pullup').classList.toggle('on', sink > 0 && agl / sink < 4 && FL.crashT <= 0);
@@ -2386,7 +2387,7 @@ document.addEventListener('keydown', flyKey); document.addEventListener('keyup',
 window.addEventListener('blur', () => { FL.keys = {}; });
 
 async function startFly() {
-  if (FL.on || BG.on || !HAS_TERRAIN) return;
+  if (FL.on || BG.on) return;
   if (!THREE) {
     flyBtn.disabled = true; flyBtn.textContent = 'Fuelling the jet…';
     try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
@@ -2398,18 +2399,22 @@ async function startFly() {
   popup.remove();
   jetPrev = { padding: map.getPadding(), maxZoom: map.getMaxZoom(), maxPitch: map.getMaxPitch(), sky: map.getSky() };
   if (proj !== 'mercator') map.setProjection({ type: 'mercator' });
-  map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
+  if (HAS_TERRAIN) map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
   map.setMaxZoom(21); map.setMaxPitch(170); map.setCenterClampedToGround(false);
   map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
-  map.setSky(MOON ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
-    : { 'sky-color': '#b98d68', 'horizon-color': '#e6c7a4', 'fog-color': '#d9b590', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });
+  const SKY = c => ({ 'sky-color': c[0], 'horizon-color': c[1], 'fog-color': c[2], 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });
+  map.setSky(MOON || EUROPA ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
+    : JUPITER ? SKY(['#1d1a24', '#c9b08c', '#bfa27d']) : SATURN ? SKY(['#16161c', '#e3cf9f', '#d6c08c'])
+    : SKY(['#b98d68', '#e6c7a4', '#d9b590']));
   HANDLERS.forEach(hn => map[hn].disable());
   FL.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
   FL.offMarkers.forEach(m => m.remove());
   if (!jetLayer) { jetLayer = makeJetLayer(); map.addLayer(jetLayer); }
-  // take off from where you are looking, or over the Moon's Montes Apenninus / Mars's Valles Marineris when zoomed out
-  const here = map.getZoom() >= 6, start = here ? map.getCenter() : MOON ? new maplibregl.LngLat(-2.5, 19.5) : new maplibregl.LngLat(-70, -8);
-  const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : MOON ? 20 : 90;
+  // take off from where you are looking, or over a landmark of each world when zoomed out
+  const TAKEOFF = MOON ? [-2.5, 19.5, 20, 'the Montes Apenninus'] : EUROPA ? [86.3, 9.7, 90, 'Conamara Chaos']
+    : JUPITER ? [-62, -22, 90, 'the Great Red Spot'] : SATURN ? [-60, 33, 90, 'the band of the 2010–11 great storm'] : [-70, -8, 90, 'Valles Marineris'];
+  const here = map.getZoom() >= 6, start = here ? map.getCenter() : new maplibregl.LngLat(TAKEOFF[0], GIANT ? toMapLat(TAKEOFF[1]) : TAKEOFF[1]);
+  const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : TAKEOFF[2];
   let g0 = null; try { g0 = map.queryTerrainElevation(start); } catch (e) {}
   Object.assign(FL, { on: true, mx: mc.x, my: mc.y, g: g0 || 0, alt: (g0 || 0) + 1200 * BODY_SCALE, v: (JET.vmin + 0.6 * (JET.vmax - JET.vmin)) * FL.M, thr: 0.6,
     heading, camYaw: heading, pr: 0, rr: 0, yr: 0, bank: 0, crashT: 0, keys: {}, t: 0, camMode: 0 });
@@ -2418,7 +2423,7 @@ async function startFly() {
   setJetSpeed(FL.M);
   document.body.classList.add('flying');
   document.activeElement && document.activeElement.blur();
-  if (!here) showToast(MOON ? 'Airborne over the Montes Apenninus. Hold Shift for the afterburner!' : 'Airborne over Valles Marineris. Hold Shift for the afterburner!');
+  if (!here) showToast('Airborne over ' + TAKEOFF[3] + '. Hold Shift for the afterburner!');
   FL.raf = requestAnimationFrame(flyStep);
 }
 function stopFly() {
@@ -2427,7 +2432,9 @@ function stopFly() {
   document.body.classList.remove('flying');
   document.getElementById('pullup').classList.remove('on');
   HANDLERS.forEach(hn => map[hn].enable());
-  (FL.offMarkers || []).forEach(m => m.addTo(map)); FL.offMarkers = null;
+  // put the labels back; a marker can throw while a terrain tile is half-loaded, so retry those once the map settles
+  const back = (FL.offMarkers || []).filter(m => { try { m.addTo(map); return false; } catch (e) { m.remove(); return true; } }); FL.offMarkers = null;
+  if (back.length) map.once('idle', () => back.forEach(m => { try { m.addTo(map); } catch (e) {} }));
   map.setCenterClampedToGround(true);
   map.setPadding(jetPrev.padding); map.setSky(jetPrev.sky || {});
   if (proj !== 'mercator') map.setProjection({ type: proj });
