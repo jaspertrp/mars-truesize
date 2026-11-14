@@ -1075,7 +1075,7 @@ map.on('load', () => {
     if (saved.items.some(p => /^[pc]:/.test(String(p.n)))) ensureProvinces().then(restore); else restore();
   } else {
     if (MOON) {
-      addCountry('France', 32.8, -15.6);                 // filling Mare Imbrium
+      addCountry('Germany', 32.8, -15.6);                // inside Mare Imbrium
       addCountry('Netherlands', 9.6, -24.5);             // beside Copernicus
     } else {
       addCountry('United States of America', -12, -62);   // over Valles Marineris
