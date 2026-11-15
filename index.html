@@ -185,7 +185,7 @@
 <div class="panel" id="panel">
   <div class="head">
     <h1>True Size of <span id="bodyName">Mars</span></h1>
-    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button><button type="button" data-b="saturn">Saturn</button></div>
+    <div class="bodysw" id="bodysw" role="group" aria-label="Choose a world"><button type="button" data-b="mars">Mars</button><button type="button" data-b="moon">Moon</button><button type="button" data-b="europa">Europa</button><button type="button" data-b="jupiter">Jupiter</button><button type="button" data-b="saturn">Saturn</button><button type="button" data-b="pluto" title="THE PLANET Pluto">Pluto</button></div>
   </div>
   <div class="seg" id="seg"><button data-p="mercator">Flat map</button><button data-p="globe">Globe</button></div>
   <div class="basesel"><label for="base">Basemap</label><select id="base"></select></div>
@@ -208,10 +208,11 @@
   <div class="foot">
     <label><input type="checkbox" id="tFeat" checked> Landmarks</label>
     <label><input type="checkbox" id="tSites" checked> Landers</label>
+    <label id="tTracksL" style="display:none"><input type="checkbox" id="tTracks" checked> Rover tracks</label>
     <label><input type="checkbox" id="tNames" checked> Names</label>
     <label><input type="checkbox" id="tGrid"> Grid</label>
     <button id="clear">Clear all</button>
-    <button id="cmpBtn" title="Mars, the Moon and Europa side by side at their real sizes">Compare sizes</button>
+    <button id="cmpBtn" title="Mars, the Moon, Europa and THE PLANET Pluto side by side at their real sizes">Compare sizes</button>
   </div>
 </div>
 <div class="hud" id="hud" role="region" aria-label="Moon buggy">
@@ -245,7 +246,7 @@
 <div class="cmp" id="cmp" role="dialog" aria-label="Compare sizes">
   <div class="cmpbox">
     <button type="button" class="cmpx" id="cmpX" aria-label="Close">&times;</button>
-    <h2>Mars, the Moon and Europa <span>at their real sizes</span></h2>
+    <h2>Mars, the Moon, Europa and THE PLANET Pluto <span>at their real sizes</span></h2>
     <div class="cmprow" id="cmpRow"></div>
     <p class="cmpnote">Click a world to open it.</p>
   </div>
@@ -266,16 +267,16 @@ const TOPO = {"type":"Topology","objects":{"countries":{"type":"GeometryCollecti
 // ?body=moon / ?body=mars picks one; otherwise the last one this browser used (Mars for new visitors).
 const BODY = (() => {
   const q = new URLSearchParams(location.search).get('body');
-  const ok = b => b === 'mars' || b === 'moon' || b === 'europa' || b === 'jupiter' || b === 'saturn';
+  const ok = b => b === 'mars' || b === 'moon' || b === 'europa' || b === 'jupiter' || b === 'saturn' || b === 'pluto';
   if (ok(q)) return q;
   try { const b = localStorage.getItem('truesize-body'); return ok(b) ? b : 'mars'; } catch (e) { return 'mars'; }
 })();
 try { localStorage.setItem('truesize-body', BODY); } catch (e) {}
-const MOON = BODY === 'moon', EUROPA = BODY === 'europa', MARS = BODY === 'mars', JUPITER = BODY === 'jupiter', SATURN = BODY === 'saturn';
+const MOON = BODY === 'moon', EUROPA = BODY === 'europa', MARS = BODY === 'mars', JUPITER = BODY === 'jupiter', SATURN = BODY === 'saturn', PLUTO = BODY === 'pluto';
 const GIANT = JUPITER || SATURN;      // gas giants: flattened globe, no surface
-const BODY_SHORT = MOON ? 'Moon' : EUROPA ? 'Europa' : JUPITER ? 'Jupiter' : SATURN ? 'Saturn' : 'Mars';
-const BODY_NAME = MOON ? 'the Moon' : BODY_SHORT, BODY_THE = BODY_NAME;
-const HAS_TERRAIN = !EUROPA && !GIANT;     // no global height map of Europa; gas giants have no surface
+const BODY_SHORT = MOON ? 'Moon' : EUROPA ? 'Europa' : JUPITER ? 'Jupiter' : SATURN ? 'Saturn' : PLUTO ? 'Pluto' : 'Mars';
+const BODY_NAME = MOON ? 'the Moon' : PLUTO ? 'THE PLANET Pluto' : BODY_SHORT, BODY_THE = BODY_NAME;   // Pluto: by popular demand
+const HAS_TERRAIN = !EUROPA && !GIANT && !PLUTO;     // no global height map of Europa (Pluto's covers one side); gas giants have no surface
 // Jupiter and Saturn are drawn as flattened globes (see installEllipsoid). Map latitudes there are the ellipsoid's
 // *reduced* latitude beta; everything shown to people uses planetographic latitude phi: tan(beta) = Q tan(phi).
 const J_A = SATURN ? 60268 : 71492, J_B = SATURN ? 54364 : 66854, Q = GIANT ? J_B / J_A : 1;
@@ -285,6 +286,7 @@ const GEOD = GIANT && window.geodesic ? new geodesic.Geodesic.Geodesic(J_A, 1 - 
 document.title = 'True Size of ' + BODY_NAME;
 document.getElementById('bodyName').textContent = BODY_SHORT;
 if (MOON) document.getElementById('bodyName').before('the ');
+if (PLUTO) document.getElementById('bodyName').before('THE PLANET ');
 document.querySelectorAll('#bodysw button').forEach(b => {
   b.classList.toggle('on', b.dataset.b === BODY);
   b.onclick = () => { if (b.dataset.b === BODY) return; try { save(); } catch (e) {} location.href = location.pathname + '?body=' + b.dataset.b; };
@@ -292,16 +294,17 @@ document.querySelectorAll('#bodysw button').forEach(b => {
 if (MOON) { const tl = document.getElementById('trekLink'); tl.href = 'https://trek.nasa.gov/moon/'; tl.textContent = 'NASA Moon Trek'; }
 if (JUPITER) { const tl = document.getElementById('trekLink'); tl.href = 'https://www.planetary.org/space-images/merged-cassini-and-juno'; tl.textContent = 'The Planetary Society'; tl.previousSibling.textContent = ' · map via '; }
 if (SATURN) { const tl = document.getElementById('trekLink'); tl.href = 'https://pds-atmospheres.nmsu.edu/data_and_services/atmospheres_data/Cassini/sat_global_map.html'; tl.textContent = 'NASA PDS Atmospheres'; tl.previousSibling.textContent = ' · map via '; }
+if (PLUTO) { const tl = document.getElementById('trekLink'); tl.href = 'https://astrogeology.usgs.gov/search/map/new-horizon-global-mosaics'; tl.textContent = 'USGS Astrogeology'; tl.previousSibling.textContent = ' · map via '; }
 if (EUROPA) { const tl = document.getElementById('trekLink'); tl.href = 'https://astrogeology.usgs.gov/search/map/europa_voyager_galileo_ssi_global_mosaic_500m'; tl.textContent = 'USGS Astrogeology'; tl.previousSibling.textContent = ' · map via '; }
 
-const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : GIANT ? J_A : 3389.5;
+const R_EARTH = 6371.0088, R_BODY = MOON ? 1737.4 : EUROPA ? 1560.8 : PLUTO ? 1188.3 : GIANT ? J_A : 3389.5;
 const K = R_EARTH / R_BODY;
 const BODY_AREA = GIANT   // surface of an oblate ellipsoid
   ? (() => { const e = Math.sqrt(1 - Q * Q); return 2 * Math.PI * J_A * J_A * (1 + (Q * Q / e) * Math.atanh(e)); })()
   : 4 * Math.PI * R_BODY * R_BODY;
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const PALETTE = ['#4cc9f0','#b8f24c','#f72585','#ffd166','#7b6cff','#2ee6a8','#ff9f1c','#e0e0ff','#ff5d73','#00b4d8'];
-const KEY = MOON ? 'moon-truesize-v1' : EUROPA ? 'europa-truesize-v1' : JUPITER ? 'jupiter-truesize-v1' : SATURN ? 'saturn-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
+const KEY = MOON ? 'moon-truesize-v1' : EUROPA ? 'europa-truesize-v1' : PLUTO ? 'pluto-truesize-v1' : JUPITER ? 'jupiter-truesize-v1' : SATURN ? 'saturn-truesize-v1' : 'mars-truesize-v2';   // each world keeps its own countries and settings
 
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
@@ -331,6 +334,14 @@ const EUROPA_BASEMAPS = {
     url: (z, r, c) => new URL(`europa-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Europa Voyager–Galileo SSI global mosaic 500 m: NASA/JPL/USGS' }
 };
+// THE PLANET Pluto: New Horizons' July 2015 flyby, the USGS 300 m global mosaic cut into our own tiles (pluto-tiles/,
+// tools/build_pluto_tiles.py). One hemisphere is sharp, the other was only seen from afar, and south of about 35°S it
+// was polar night: that part was never seen and is left dark grey.
+const PLUTO_BASEMAPS = {
+  nh: { label: 'New Horizons (2015)', ts: 256, max: 5, out: 'image/jpeg', bg: '#1a1a1a',
+    url: (z, r, c) => new URL(`pluto-tiles/${z}/${r}/${c}.jpg`, location.href).href,
+    credit: 'Pluto New Horizons LORRI–MVIC global mosaic 300 m: NASA/JHUAPL/SwRI/LPI, USGS · dark south: never seen (polar night in 2015)' }
+};
 // Jupiter: Björn Jónsson's global map (Cassini, Dec 2000, with Juno's poles; 40 px/degree; CC BY 3.0),
 // resampled to the flattened globe's latitudes and cut into our own tiles (jupiter-tiles/,
 // tools/build_jupiter_tiles.py). The clouds have moved on since.
@@ -347,7 +358,7 @@ const SATURN_BASEMAPS = {
     url: (z, r, c) => new URL(`saturn-tiles/${z}/${r}/${c}.jpg`, location.href).href,
     credit: 'Cassini ISS colour map, 11 Aug 2011: NASA/JPL-Caltech/SSI, L. Li et al. (PDS) · north pole: PIA21611, June 2013, NASA/JPL-Caltech/SSI/Hampton University · ring profile: Cassini RSS (PDS Rings)' }
 };
-const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : SATURN ? SATURN_BASEMAPS : {
+const BASEMAPS = MOON ? MOON_BASEMAPS : EUROPA ? EUROPA_BASEMAPS : PLUTO ? PLUTO_BASEMAPS : JUPITER ? JUPITER_BASEMAPS : SATURN ? SATURN_BASEMAPS : {
   viking: { label: 'Colour (Viking)', ts: 256, max: 7, out: 'image/jpeg', bg: '#6b3b26',
     url: (z, r, c) => `${TREK}Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/${z}/${r}/${c}.jpg`,
     credit: 'Viking MDIM 2.1 colour mosaic, 232 m: NASA/JPL/USGS' },
@@ -491,7 +502,7 @@ async function renderEq(bm, z, x, y, isRef) {
   }
   return out;
 }
-const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : GIANT ? 'cassini' : 'relief';
+const DEFAULT_BASE = MOON ? 'wac' : EUROPA ? 'usgs' : PLUTO ? 'nh' : GIANT ? 'cassini' : 'relief';
 // the visitor's chosen basemap, read up front so an early fallback can never overwrite it
 let wantedBase = (saved && saved.v >= 3 && BASEMAPS[saved.base] && saved.base) || DEFAULT_BASE;
 let baseKey = wantedBase, fellBack = false;
@@ -617,8 +628,8 @@ for (const [k, B] of Object.entries(BASEMAPS)) {
 const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
-  center: [-62, 0], zoom: startProj === 'globe' ? 1.6 : 2,
-  minZoom: 0.5, maxZoom: EUROPA ? 9 : GIANT ? 10 : 18, renderWorldCopies: true, maxPitch: 80,
+  center: [PLUTO ? 175 : -62, PLUTO ? 15 : 0], zoom: startProj === 'globe' ? 1.6 : 2,
+  minZoom: 0.5, maxZoom: EUROPA || PLUTO ? 9 : GIANT ? 10 : 18, renderWorldCopies: true, maxPitch: 80,
   style: {
     version: 8,
     projection: { type: startProj },
@@ -797,7 +808,11 @@ const FEATURES = SATURN ? [
   ['South Equatorial Belt', -15, 110], ['North Tropical Zone', 20, 150], ['South Tropical Zone', -25, 150],
   ['North Temperate Belt', 27, -150], ['South Temperate Belt', -30, -150], ['North Polar Region', 62, 30],
   ['South Polar Region', -62, 30]
-].map(([n, phi, lo]) => [n, toMapLat(phi), lo]) : EUROPA ? [
+].map(([n, phi, lo]) => [n, toMapLat(phi), lo]) : PLUTO ? [
+  ['Sputnik Planitia', 20, 180], ['Tombaugh Regio', 10, 165], ['Cthulhu Macula', -2, 100], ['Wright Mons', -21.5, 173],
+  ['Piccard Mons', -35, 176], ['Tartarus Dorsa', 10, -130], ['Krun Macula', -13, 168], ['Lowell Regio', 75, 120],
+  ['Voyager Terra', 50, 165], ['Burney', 46, 134]
+] : EUROPA ? [
   ['Pwyll', -25.2, 88.6], ['Conamara Chaos', 9.7, 86.3], ['Murias Chaos', 22, -83], ['Tyre', 34, -146.6],
   ['Callanish', -16.7, 25.4], ['Thera Macula', -46.7, 178.8], ['Thrace Macula', -46, -171],
   ['Manannán', 3, 120], ['Cilix', 2.6, 178]
@@ -817,7 +832,7 @@ const FEATURES = SATURN ? [
   ['Amazonis Planitia', 24.8, -163.6], ['Terra Cimmeria', -32.7, 145], ['Noachis Terra', -45, -5],
   ['Planum Boreum', 84, 0], ['Planum Australe', -84, 160], ['Vastitas Borealis', 67, -150]
 ];
-const SITES = EUROPA || GIANT ? [] : MOON ? [
+const SITES = EUROPA || GIANT || PLUTO ? [] : MOON ? [
   ['Apollo 11', 0.674, 23.473], ['Apollo 12', -3.012, -23.422], ['Apollo 14', -3.645, -17.471],
   ['Apollo 15', 26.132, 3.634], ['Apollo 16', -8.973, 15.501], ['Apollo 17', 20.191, 30.772],
   ['Luna 9', 7.08, -64.37], ['Luna 17 · Lunokhod 1', 38.24, -35.0], ['Surveyor 1', -2.47, -43.34],
@@ -1649,6 +1664,42 @@ function cullLabels() {
 }
 map.on('move', cullLabels); map.on('load', cullLabels);
 
+// ---------- rover tracks (Mars) ----------
+// Every drive of Perseverance (Jezero) and Curiosity (Gale) and every flight of the Ingenuity helicopter, from the
+// GeoJSON behind NASA's "Where is the rover?" maps (MMGIS), simplified into rover-tracks.geojson. Click a track for details.
+if (MARS) {
+  document.getElementById('tTracksL').style.display = '';
+  const RT_COL = ['match', ['get', 'r'], 'Perseverance', '#ff7a45', 'Curiosity', '#4fd1ff', '#ffe066'];
+  const addTracks = () => {
+    if (map.getSource('rovertracks')) return;
+    map.addSource('rovertracks', { type: 'geojson', data: new URL('rover-tracks.geojson', location.href).href });
+    const before = map.getLayer('c-fill') ? 'c-fill' : undefined, vis = document.getElementById('tTracks').checked ? 'visible' : 'none';
+    map.addLayer({ id: 'rt-casing', type: 'line', source: 'rovertracks', filter: ['!=', ['get', 'r'], 'Ingenuity'],
+      layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
+      paint: { 'line-color': '#000', 'line-opacity': 0.45, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2.4, 12, 4, 17, 8] } }, before);
+    map.addLayer({ id: 'rt-line', type: 'line', source: 'rovertracks', filter: ['!=', ['get', 'r'], 'Ingenuity'],
+      layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
+      paint: { 'line-color': RT_COL, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.2, 12, 2.2, 17, 5] } }, before);
+    map.addLayer({ id: 'rt-heli', type: 'line', source: 'rovertracks', filter: ['==', ['get', 'r'], 'Ingenuity'],
+      layout: { 'line-cap': 'round', visibility: vis },
+      paint: { 'line-color': RT_COL, 'line-dasharray': [1.5, 1.5], 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1, 17, 3.5] } }, before);
+  };
+  map.on('load', addTracks);
+  document.getElementById('tTracks').onchange = e => ['rt-casing', 'rt-line', 'rt-heli'].forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', e.target.checked ? 'visible' : 'none'));
+  map.on('click', e => {
+    if (!map.getLayer('rt-line') || (typeof jetPick !== 'undefined' && jetPick) || measuring) return;
+    const b = 6, f = map.queryRenderedFeatures([[e.point.x - b, e.point.y - b], [e.point.x + b, e.point.y + b]], { layers: ['rt-line', 'rt-heli'] })[0];
+    if (!f) return;
+    const p = f.properties;
+    showToast(p.r === 'Ingenuity' ? `Ingenuity helicopter · flight ${p.flight}${p.sol ? ' · sol ' + p.sol : ''}`
+      : p.r === 'Perseverance' ? `Perseverance rover · drive on sol ${p.sol}` : 'Curiosity rover · drive in Gale crater');
+  });
+  map.on('mousemove', e => {
+    if (!map.getLayer('rt-line') || map.getCanvas().style.cursor === 'crosshair') return;
+    const b = 5, hit = map.queryRenderedFeatures([[e.point.x - b, e.point.y - b], [e.point.x + b, e.point.y + b]], { layers: ['rt-line', 'rt-heli'] }).length;
+    if (hit) map.getCanvas().style.cursor = 'pointer'; else if (map.getCanvas().style.cursor === 'pointer') map.getCanvas().style.cursor = '';
+  });
+}
 // ---------- HiRISE overlay + landing sites ----------
 let showHirise = !(saved && saved.hirise === false);
 const tHirise = document.getElementById('tHirise');
@@ -1674,7 +1725,7 @@ siteSel.onchange = () => {
   const s = FLY[+siteSel.value]; siteSel.value = ''; if (!s) return;
   if (MARS && !showHirise) { showHirise = tHirise.checked = true; applyHirise(); save(); }
   // a gentle arc: out a little, across, then down to a zoom where HiRISE and the terrain still look good
-  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : EUROPA ? 5 : GIANT ? 3.2 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
+  map.flyTo({ center: [s[2], s[1]], zoom: MOON ? 11 : EUROPA || PLUTO ? 5 : GIANT ? 3.2 : 13, pitch: 0, bearing: 0, speed: 0.7, curve: 1.5, maxDuration: 7000,
     easing: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, essential: true });
 };
 
@@ -1713,12 +1764,13 @@ function save() {
 }
 
 // ---------- compare sizes ----------
-// Mars, the Moon and Europa as small turning globes, drawn to scale (diameter ∝ radius) on canvases.
+// Mars, the Moon, Europa and Pluto as small turning globes, drawn to scale (diameter ∝ radius) on canvases.
 // Each globe samples a small equirectangular texture (level 1 of its basemap: 1024 x 512 px).
 const WORLDS = [
   { b: 'mars', name: 'Mars', r: 3389.5, tile: (r, c) => `https://trek.nasa.gov/tiles/Mars/EQ/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/1/${r}/${c}.jpg` },
   { b: 'moon', name: 'The Moon', r: 1737.4, tile: (r, c) => `https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/1/${r}/${c}.jpg` },
-  { b: 'europa', name: 'Europa', r: 1560.8, tile: (r, c) => new URL(`europa-tiles/1/${r}/${c}.jpg`, location.href).href }
+  { b: 'europa', name: 'Europa', r: 1560.8, tile: (r, c) => new URL(`europa-tiles/1/${r}/${c}.jpg`, location.href).href },
+  { b: 'pluto', name: 'THE PLANET Pluto', r: 1188.3, tile: (r, c) => new URL(`pluto-tiles/1/${r}/${c}.jpg`, location.href).href }
 ];
 const cmpEl = document.getElementById('cmp');
 let cmpRaf = 0, cmpBuilt = null;
@@ -2316,8 +2368,8 @@ function spaceTexture(gl, bm) {
   });
   return t;
 }
-const SPACE_HAZE = (MOON || EUROPA ? [0.04, 0.04, 0.05] : JUPITER ? [0.79, 0.69, 0.55] : SATURN ? [0.89, 0.81, 0.62] : [0.90, 0.78, 0.64]);
-const SPACE_SKY = (MOON || EUROPA ? [0, 0, 0] : JUPITER ? [0.11, 0.10, 0.14] : SATURN ? [0.09, 0.09, 0.11] : [0.73, 0.55, 0.41]);
+const SPACE_HAZE = (MOON || EUROPA || PLUTO ? [0.04, 0.04, 0.05] : JUPITER ? [0.79, 0.69, 0.55] : SATURN ? [0.89, 0.81, 0.62] : [0.90, 0.78, 0.64]);
+const SPACE_SKY = (MOON || EUROPA || PLUTO ? [0, 0, 0] : JUPITER ? [0.11, 0.10, 0.14] : SATURN ? [0.09, 0.09, 0.11] : [0.73, 0.55, 0.41]);
 const R_EQ_M = R_BODY * 1000;   // equatorial radius in metres (the unit of the ray tracer)
 const spaceLayer = {
   id: 'space-view', type: 'custom', renderingMode: '3d',
@@ -2660,7 +2712,7 @@ async function startFly(at) {
   map.setMaxZoom(21); map.setMaxPitch(170); map.setCenterClampedToGround(false);
   map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   const SKY = c => ({ 'sky-color': c[0], 'horizon-color': c[1], 'fog-color': c[2], 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 });
-  map.setSky(MOON || EUROPA ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
+  map.setSky(MOON || EUROPA || PLUTO ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
     : JUPITER ? SKY(['#1d1a24', '#c9b08c', '#bfa27d']) : SATURN ? SKY(['#16161c', '#e3cf9f', '#d6c08c'])
     : SKY(['#b98d68', '#e6c7a4', '#d9b590']));
   HANDLERS.forEach(hn => map[hn].disable());
@@ -2668,7 +2720,7 @@ async function startFly(at) {
   FL.offMarkers.forEach(m => m.remove());
   if (!jetLayer) { jetLayer = makeJetLayer(); map.addLayer(spaceLayer); map.addLayer(jetLayer); }
   // take off from where you are looking, or over a landmark of each world when zoomed out
-  const TAKEOFF = MOON ? [-2.5, 19.5, 20, 'the Montes Apenninus'] : EUROPA ? [86.3, 9.7, 90, 'Conamara Chaos']
+  const TAKEOFF = MOON ? [-2.5, 19.5, 20, 'the Montes Apenninus'] : EUROPA ? [86.3, 9.7, 90, 'Conamara Chaos'] : PLUTO ? [165, 25, 90, 'the edge of Sputnik Planitia']
     : JUPITER ? [-62, -22, 90, 'the Great Red Spot'] : SATURN ? [-60, 33, 90, 'the band of the 2010–11 great storm'] : [-70, -8, 90, 'Valles Marineris'];
   const here = !!at || map.getZoom() >= 6, start = at ? at : here ? map.getCenter() : new maplibregl.LngLat(TAKEOFF[0], GIANT ? toMapLat(TAKEOFF[1]) : TAKEOFF[1]);
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start), heading = here ? map.getBearing() : TAKEOFF[2];
@@ -2736,6 +2788,8 @@ map.on('load', () => {
     addCountry('earth', toMapLat(-22), -27);              // the whole Earth, next to the Great Red Spot
   } else if (SATURN) {
     addCountry('earth', toMapLat(33), -40);               // the whole Earth, in the band of the 2010–11 storm
+  } else if (PLUTO) {
+    addCountry('France', 20, 180);                        // about the size of Sputnik Planitia, the 'heart'
   } else if (MARS && !new URLSearchParams(location.search).has('body')) {
     // only a first-time visitor to Mars gets two examples; a world you switch to starts empty
     addCountry('United States of America', -12, -62);   // over Valles Marineris

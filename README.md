@@ -92,3 +92,16 @@ optical depth from Cassini radio occultation Rev 7 (CORSS_8001, PDS Ring-Moon Sy
 the C ring, B ring, Cassini Division, A ring and Encke Gap are where they really are; opacity is 1 − exp(−τ/μ), so
 they close up when seen edge-on. Colours per ring are approximate; the narrow F ring is added by hand. The far side
 is hidden behind the planet by a ray test against the (squashed) planet in the fragment shader.
+
+## THE PLANET Pluto
+
+`?body=pluto`. Basemap: the USGS *Pluto New Horizons LORRI–MVIC Global Mosaic 300 m* (NASA/JHUAPL/SwRI/LPI, from the July
+2015 flyby), cut into `pluto-tiles/` by `tools/build_pluto_tiles.py`. South of about 35°S Pluto was in polar night during
+the flyby and was never seen; that part is left dark grey. Pluto's whole surface (17.6 million km²) is about the size of
+Russia. No 3D terrain: the New Horizons height map only covers one side.
+
+## Rover tracks (Mars)
+
+`rover-tracks.geojson`: every drive of Perseverance and Curiosity and every flight of the Ingenuity helicopter, from the
+GeoJSON behind NASA's "Where is the rover?" maps (MMGIS: `M20_traverse.json`, `MSL_traverse.json`,
+`m20_heli_flight_path.json` on mars.nasa.gov), with heights dropped and coordinates rounded to 6 decimals.
