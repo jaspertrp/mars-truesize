@@ -109,6 +109,19 @@
   .scale{position:absolute;z-index:9;left:14px;bottom:10px;font-size:11px;color:#f2e3da;pointer-events:none}
   .scale div{height:6px;border:1.5px solid #f2e3da;border-top:0;margin-bottom:2px;background:rgba(20,12,10,.4)}
   .feat{display:block;color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;text-shadow:0 0 3px #000,0 0 6px #000,0 0 10px rgba(0,0,0,.8);pointer-events:none}
+  #photos{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(900px,calc(100vw - 24px));background:rgba(20,14,12,.92);border:1px solid var(--line);border-radius:12px;padding:8px 10px;z-index:30;display:none;backdrop-filter:blur(6px)}
+  #photos.on{display:block}
+  #photos .ph-head{display:flex;align-items:baseline;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px}
+  #photos .ph-head b{color:var(--text);font-size:13px}
+  #photos .ph-head button{margin-left:auto;background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px}
+  #photos .ph-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+  #photos .ph-strip img{height:74px;border-radius:4px;border:2px solid transparent;cursor:pointer;flex:none;opacity:.85}
+  #photos .ph-strip img.hi,#photos .ph-strip img:hover{opacity:1;outline:2px solid #fff}
+  #phBox{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:zoom-out}
+  #phBox.on{display:flex}
+  #phBox img{max-width:94vw;max-height:84vh;border-radius:6px}
+  #phCap{color:#ddd;font-size:12px;text-align:center}
+  #phCap a{color:var(--accent)}
   .site{position:relative;display:block;font-size:10px;font-weight:500;color:#ffe0c9;white-space:nowrap;padding-left:10px;text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none}
   .site::before{content:'';position:absolute;left:0;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#ffd27a;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
   .cname{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 7px #000}
@@ -1664,6 +1677,106 @@ function cullLabels() {
 }
 map.on('move', cullLabels); map.on('load', cullLabels);
 
+// ---------- Perseverance's photos, with where they look (Mars) ----------
+// Click a Perseverance drive: the photos it took at the stop that drive ended at (until its next drive) load from
+// NASA's raw-image feed, as thumbnails, each with a view cone on the map. The cone's direction comes from the
+// image's camera pointing vector (rover frame) turned by the rover's attitude quaternion (rover -> local north/east/
+// down); its width from the camera model's focal length and the image width; its length from where the view centre
+// meets the ground (a 2 m-high mast looking down) or 80 m if it looks at the horizon. Curiosity's feed has no
+// pointing data, so it has no photos here.
+const PH = { tracks: null, items: [], open: false };
+const PH_CAMS = { NAVCAM_LEFT: { n: 'Navcam', c: '#7fd1ff' }, MCZ_LEFT: { n: 'Mastcam-Z', c: '#ffd166' }, FRONT_HAZCAM_LEFT_A: { n: 'Hazcam', c: '#b4f08c' } };
+const vec3 = s => (String(s || '').match(/-?[\d.]+(e-?\d+)?/gi) || []).map(Number);
+function qRot(q, v) {               // rotate v by unit quaternion q = (w, x, y, z)
+  const [w, x, y, z] = q, [a, b, c] = v;
+  const ix = w * a + y * c - z * b, iy = w * b + z * a - x * c, iz = w * c + x * b - y * a, iw = -x * a - y * b - z * c;
+  return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x];
+}
+function photoGeom(im) {
+  const q = vec3(im.attitude), A = vec3(im.camera && im.camera.camera_vector);
+  if (q.length !== 4 || A.length !== 3) return null;
+  const d = qRot(q, A);                                   // north, east, down
+  const az = Math.atan2(d[1], d[0]) * R2D, el = -Math.asin(Math.max(-1, Math.min(1, d[2]))) * R2D;
+  // field of view from the CAHV(ORE) model: focal length in pixels = |A x H|; frame width from the subframe
+  let hfov = 45;
+  const parts = String(im.camera.camera_model_component_list || '').split(';').map(vec3);
+  const dim = vec3(im.extended && im.extended.dimension);   // the camera model is in the downsampled image's pixels
+  if (parts.length > 2 && parts[1].length === 3 && parts[2].length === 3 && dim.length === 2) {
+    const [a1, a2, a3] = parts[1], [h1, h2, h3] = parts[2];
+    const f = Math.hypot(a2 * h3 - a3 * h2, a3 * h1 - a1 * h3, a1 * h2 - a2 * h1);
+    if (f > 50) hfov = 2 * Math.atan(dim[0] / 2 / f) * R2D;
+  }
+  hfov = Math.max(2, Math.min(110, hfov));
+  const L = el < -1.5 ? Math.max(3, Math.min(80, 2 / Math.tan(-el * D2R))) : 80;
+  return { az, el, hfov, L };
+}
+function conePoly(lon, lat, g) {
+  const R = R_BODY * 1000, pts = [[lon, lat]], n = 10;
+  for (let i = 0; i <= n; i++) {
+    const a = (g.az - g.hfov / 2 + g.hfov * i / n) * D2R;
+    pts.push([lon + g.L * Math.sin(a) / (R * D2R * Math.cos(lat * D2R)), lat + g.L * Math.cos(a) / (R * D2R)]);
+  }
+  pts.push([lon, lat]);
+  return pts;
+}
+const phEl = document.createElement('div'); phEl.id = 'photos'; phEl.innerHTML =
+  '<div class="ph-head"><b id="phTitle"></b><span id="phSub"></span><button id="phClose" title="Close">&#10005;</button></div><div class="ph-strip" id="phStrip"></div>';
+document.body.appendChild(phEl);
+const phBox = document.createElement('div'); phBox.id = 'phBox';
+phBox.innerHTML = '<img id="phBig" alt=""><div id="phCap"></div>'; document.body.appendChild(phBox);
+phBox.onclick = () => phBox.classList.remove('on');
+document.getElementById('phClose').onclick = () => closePhotos();
+function closePhotos() {
+  phEl.classList.remove('on'); PH.open = false;
+  if (map.getSource('ph-cones')) map.getSource('ph-cones').setData({ type: 'FeatureCollection', features: [] });
+}
+function phHighlight(i) { if (map.getLayer('ph-cone-hi')) map.setFilter('ph-cone-hi', ['==', ['get', 'i'], i]); document.querySelectorAll('#phStrip img').forEach(e => e.classList.toggle('hi', +e.dataset.i === i)); }
+function phOpen(i) {
+  const it = PH.items[i]; if (!it) return;
+  document.getElementById('phBig').src = it.im.image_files.large || it.im.image_files.medium;
+  document.getElementById('phCap').innerHTML = `${PH_CAMS[it.im.camera.instrument].n} · sol ${it.im.sol} · looking ${Math.round((it.g.az + 360) % 360)}° (${it.g.el >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(it.g.el))}°), ${Math.round(it.g.hfov)}° wide · <a href="${it.im.link}" target="_blank" rel="noopener">NASA page</a> · NASA/JPL-Caltech${/MCZ/.test(it.im.camera.instrument) ? '/ASU' : ''}`;
+  phBox.classList.add('on'); phHighlight(i);
+}
+async function showPhotos(sol, lon, lat) {
+  if (!PH.tracks) PH.tracks = (await fetch(new URL('rover-tracks.geojson', location.href).href).then(r => r.json())).features
+    .filter(f => f.properties.r === 'Perseverance').map(f => f.properties.sol).sort((a, b) => a - b);
+  const next = PH.tracks.find(s => s > sol), sol2 = next ? Math.min(next - 1, sol + 30) : sol + 30;
+  PH.open = true; phEl.classList.add('on');
+  document.getElementById('phTitle').textContent = 'Perseverance photos';
+  document.getElementById('phSub').textContent = `sol ${sol}${sol2 > sol ? '–' + sol2 : ''} · loading…`;
+  const strip = document.getElementById('phStrip'); strip.innerHTML = '';
+  const base = 'https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=100&page=0&order=sol+asc';
+  let ims = [];
+  try {
+    const res = await Promise.all(Object.keys(PH_CAMS).map(cam =>
+      fetch(`${base}&search=${cam}&condition_2=${sol}:sol:gte&condition_3=${sol2}:sol:lte`).then(r => r.json()).catch(() => ({ images: [] }))));
+    ims = res.flatMap(j => j.images || []);
+  } catch (e) {}
+  if (!PH.open) return;
+  // thumbnails of full frames only, newest first; one per pointing (drop near-duplicates from stereo bursts)
+  const seen = new Set();
+  PH.items = ims.filter(im => im.sample_type === 'Full' && im.image_files && im.image_files.small)
+    .map(im => ({ im, g: photoGeom(im) })).filter(it => it.g)
+    .filter(it => { const k = it.im.camera.instrument + Math.round(it.g.az / 3) + ':' + Math.round(it.g.el / 3) + ':' + it.im.sol; if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 120);
+  document.getElementById('phSub').textContent = `sol ${sol}${sol2 > sol ? '–' + sol2 : ''} · ${PH.items.length} photo${PH.items.length === 1 ? '' : 's'} · hover to see where it looks, click to enlarge`;
+  PH.items.forEach((it, i) => {
+    const t = document.createElement('img'); t.src = it.im.image_files.small; t.loading = 'lazy'; t.dataset.i = i;
+    t.style.borderColor = PH_CAMS[it.im.camera.instrument].c; t.title = `${PH_CAMS[it.im.camera.instrument].n} · sol ${it.im.sol}`;
+    t.onmouseenter = () => phHighlight(i); t.onclick = () => phOpen(i);
+    strip.appendChild(t);
+  });
+  const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => ({ type: 'Feature',
+    properties: { i, c: PH_CAMS[it.im.camera.instrument].c }, geometry: { type: 'Polygon', coordinates: [conePoly(lon, lat, it.g)] } })) };
+  if (!map.getSource('ph-cones')) {
+    map.addSource('ph-cones', { type: 'geojson', data: fc });
+    map.addLayer({ id: 'ph-cone', type: 'fill', source: 'ph-cones', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.08 } });
+    map.addLayer({ id: 'ph-cone-line', type: 'line', source: 'ph-cones', paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.35, 'line-width': 0.8 } });
+    map.addLayer({ id: 'ph-cone-hi', type: 'fill', source: 'ph-cones', filter: ['==', ['get', 'i'], -1], paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.55 } });
+    map.on('click', 'ph-cone', e => { const f = e.features && e.features[e.features.length - 1]; if (f) phOpen(f.properties.i); });
+  } else map.getSource('ph-cones').setData(fc);
+  if (map.getZoom() < 17) map.easeTo({ center: [lon, lat], zoom: 17.5, duration: 1200 });
+}
 // ---------- rover tracks (Mars) ----------
 // Every drive of Perseverance (Jezero) and Curiosity (Gale) and every flight of the Ingenuity helicopter, from the
 // GeoJSON behind NASA's "Where is the rover?" maps (MMGIS), simplified into rover-tracks.geojson. Click a track for details.
@@ -1691,6 +1804,16 @@ if (MARS) {
     const b = 6, f = map.queryRenderedFeatures([[e.point.x - b, e.point.y - b], [e.point.x + b, e.point.y + b]], { layers: ['rt-line', 'rt-heli'] })[0];
     if (!f) return;
     const p = f.properties;
+    if (p.r === 'Perseverance' && p.sol != null) {
+      const c = f.geometry.coordinates, end = Array.isArray(c[0][0]) ? c[c.length - 1][c[c.length - 1].length - 1] : c[c.length - 1];
+      // the clicked piece may be a tile-clipped part: use the drive's real end point from the data
+      fetch(new URL('rover-tracks.geojson', location.href).href).then(r => r.json()).then(d => {
+        const df = d.features.find(x => x.properties.r === 'Perseverance' && x.properties.sol === p.sol);
+        const e2 = df ? df.geometry.coordinates[df.geometry.coordinates.length - 1] : end;
+        showPhotos(p.sol, e2[0], e2[1]);
+      });
+      return;
+    }
     showToast(p.r === 'Ingenuity' ? `Ingenuity helicopter · flight ${p.flight}${p.sol ? ' · sol ' + p.sol : ''}`
       : p.r === 'Perseverance' ? `Perseverance rover · drive on sol ${p.sol}` : 'Curiosity rover · drive in Gale crater');
   });
