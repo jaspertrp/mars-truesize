@@ -1756,7 +1756,7 @@ async function showPhotos(sol, lon, lat) {
   // thumbnails of full frames only, newest first; one per pointing (drop near-duplicates from stereo bursts)
   const seen = new Set();
   PH.items = ims.filter(im => im.sample_type === 'Full' && im.image_files && im.image_files.small)
-    .map(im => ({ im, g: photoGeom(im) })).filter(it => it.g)
+    .map(im => ({ im, g: photoGeom(im) })).filter(it => it.g && it.g.el < 50)   // skip sky / sun shots: no place on the map
     .filter(it => { const k = it.im.camera.instrument + Math.round(it.g.az / 3) + ':' + Math.round(it.g.el / 3) + ':' + it.im.sol; if (seen.has(k)) return false; seen.add(k); return true; })
     .slice(0, 120);
   document.getElementById('phSub').textContent = `sol ${sol}${sol2 > sol ? '–' + sol2 : ''} · ${PH.items.length} photo${PH.items.length === 1 ? '' : 's'} · hover to see where it looks, click to enlarge`;
