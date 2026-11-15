@@ -59,6 +59,12 @@
   .basesel select{flex:1;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:#1d1411;color:var(--text);font:inherit;font-size:13px}
   .measure{position:absolute;z-index:15;left:50%;bottom:34px;transform:translateX(-50%);background:var(--panel,#1c1210);border:1px solid var(--accent);color:var(--text);padding:7px 8px 7px 14px;border-radius:9px;font-size:13px;display:none;align-items:center;gap:10px;max-width:92%;box-shadow:0 4px 16px rgba(0,0,0,.35)}
   .measure.on{display:flex}
+  .spray{gap:8px;padding-left:12px;flex-wrap:wrap;justify-content:center}
+  .spray .gfc{width:20px;height:20px;border-radius:50%;padding:0;border:2px solid rgba(255,255,255,.25)}
+  .spray .gfc.on{border-color:#fff;box-shadow:0 0 0 2px var(--accent)}
+  .spray .gfsz{display:flex;gap:3px}
+  .spray .gfsz button.on{border-color:var(--accent);color:var(--accent)}
+  #gfCols{display:flex;gap:5px}
   .measure b{color:var(--accent);font-weight:600}
   .measure .hint{color:var(--muted)}
   .measure button{background:none;border:1px solid #4a362e;color:var(--text);border-radius:6px;padding:3px 8px;font:inherit;font-size:12px;cursor:pointer}
@@ -778,6 +784,9 @@ class ViewControl {
     btn('N', 'Reset view: north up, no tilt', () => m.easeTo({ bearing: 0, pitch: 0, duration: 600 }));
     this.ruler = btn('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>',
       'Measure distance and area', () => setMeasuring(!measuring));
+    window.rulerBtn = this.ruler;
+    window.sprayBtn = btn('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="7" y="9" width="8" height="12" rx="2"/><path d="M9 9V6h4v3M11 6V4h3"/><path d="M17 4h.01M19 6h.01M17 7h.01M20 3h.01" stroke-width="2.4" stroke-linecap="round"/></svg>',
+      'Spray-paint graffiti on ' + BODY_NAME, () => setSpraying(!GF.on));
     const sync = () => this.tilt3d.classList.toggle('on', m.getPitch() > 10);
     m.on('pitchend', sync); m.on('load', sync);
     return el;
@@ -1493,7 +1502,7 @@ map.on('mousemove', 'c-fill', e => {
 map.on('mouseleave', 'c-fill', () => { if (!drag) { map.getCanvas().style.cursor = ''; popup.remove(); } });
 
 function startDrag(e) {
-  if (measuring || (typeof jetPick !== 'undefined' && jetPick)) return;
+  if ((typeof GF !== 'undefined' && GF.on) || measuring || (typeof jetPick !== 'undefined' && jetPick)) return;
   const oe = e.originalEvent;
   // leave right-drag, Ctrl/⌘-drag and multi-finger gestures to the map (tilt / rotate)
   if (oe.touches ? oe.touches.length > 1 : (oe.button !== 0 || oe.ctrlKey || oe.metaKey)) return;
@@ -2125,9 +2134,108 @@ function drawMeasure() {
   mText.innerHTML = t;
 }
 function clearMeasure() { mPts = []; mClosed = mDone = false; mHover = null; drawMeasure(); }
+// ---------- spray paint ----------
+// Spray graffiti onto the planet. Strokes stick to the ground: each is stored in map coordinates with the zoom it
+// was sprayed at, and drawn with a width that doubles with every zoom level, so it keeps its true size (a stroke
+// sprayed over a crater stays crater-sized). A soft wide glow, a core line and a speckle of droplets make the spray
+// look. Each world keeps its own graffiti (saved in the browser).
+const GF_KEY = KEY + '-graffiti', GF_COLORS = ['#ff3b6b', '#ffd23f', '#3bf0a0', '#3bb8ff', '#b06bff', '#ffffff', '#111111'];
+const GF = { on: false, c: GF_COLORS[0], w: 14, strokes: [], cur: null, last: null };
+try { const g = JSON.parse(localStorage.getItem(GF_KEY) || '[]'); if (Array.isArray(g)) GF.strokes = g; } catch (e) {}
+const gfBox = document.createElement('div'); gfBox.className = 'measure spray'; gfBox.id = 'spray';
+gfBox.innerHTML = '<span class="hint">Spray:</span><span id="gfCols"></span>' +
+  '<span class="gfsz" id="gfSz"><button type="button" data-w="6">S</button><button type="button" data-w="14">M</button><button type="button" data-w="32">L</button><button type="button" data-w="70">XL</button></span>' +
+  '<button type="button" id="gfUndo">Undo</button><button type="button" id="gfClear">Clear</button><button type="button" id="gfDone" aria-label="Stop spraying">&times;</button>';
+document.body.appendChild(gfBox);
+GF_COLORS.forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'gfc'; b.style.background = c; b.dataset.c = c; b.title = c; document.getElementById('gfCols').appendChild(b); });
+const gfSync = () => {
+  document.querySelectorAll('#gfCols .gfc').forEach(b => b.classList.toggle('on', b.dataset.c === GF.c));
+  document.querySelectorAll('#gfSz button').forEach(b => b.classList.toggle('on', +b.dataset.w === GF.w));
+};
+document.getElementById('gfCols').onclick = e => { if (e.target.dataset.c) { GF.c = e.target.dataset.c; gfSync(); } };
+document.getElementById('gfSz').onclick = e => { if (e.target.dataset.w) { GF.w = +e.target.dataset.w; gfSync(); } };
+document.getElementById('gfUndo').onclick = () => { GF.strokes.pop(); gfSave(); gfDraw(); };
+document.getElementById('gfClear').onclick = () => { if (GF.strokes.length && confirmClear()) { GF.strokes = []; gfSave(); gfDraw(); } };
+function confirmClear() { return GF.strokes.length < 3 || window.confirm('Remove all graffiti from ' + BODY_NAME + '?'); }
+document.getElementById('gfDone').onclick = () => setSpraying(false);
+gfSync();
+function gfSave() { try { localStorage.setItem(GF_KEY, JSON.stringify(GF.strokes)); } catch (e) {} }
+// width that keeps true ground size: w px at zoom z, doubling per zoom level
+const gfW = k => ['interpolate', ['exponential', 2], ['zoom'], 0, ['*', k, ['get', 'w'], ['^', 2, ['-', 0, ['get', 'z']]]],
+  24, ['*', k, ['get', 'w'], ['^', 2, ['-', 24, ['get', 'z']]]]];
+function gfData() {
+  const lines = [], dots = [];
+  for (const s of GF.strokes) {
+    const pts = s.p.length === 1 ? [s.p[0], s.p[0]] : s.p;
+    lines.push({ type: 'Feature', properties: { c: s.c, w: s.w, z: s.z }, geometry: { type: 'LineString', coordinates: pts } });
+    for (const d of s.d || []) dots.push({ type: 'Feature', properties: { c: s.c, w: d[2], z: s.z }, geometry: { type: 'Point', coordinates: [d[0], d[1]] } });
+  }
+  return [{ type: 'FeatureCollection', features: lines }, { type: 'FeatureCollection', features: dots }];
+}
+function gfDraw() {
+  const [l, d] = gfData();
+  if (!map.getSource('gf-lines')) {
+    if (!map.isStyleLoaded()) return;
+    map.addSource('gf-lines', { type: 'geojson', data: l });
+    map.addSource('gf-dots', { type: 'geojson', data: d });
+    const before = map.getLayer('c-fill') ? 'c-fill' : undefined;
+    map.addLayer({ id: 'gf-glow', type: 'line', source: 'gf-lines', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.35, 'line-width': gfW(1.9), 'line-blur': gfW(0.9) } }, before);
+    map.addLayer({ id: 'gf-core', type: 'line', source: 'gf-lines', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.88, 'line-width': gfW(1), 'line-blur': gfW(0.22) } }, before);
+    map.addLayer({ id: 'gf-dots', type: 'circle', source: 'gf-dots',
+      paint: { 'circle-color': ['get', 'c'], 'circle-opacity': 0.75, 'circle-radius': gfW(1), 'circle-blur': 0.4,
+        'circle-pitch-alignment': 'map' } }, before);
+    return;
+  }
+  map.getSource('gf-lines').setData(l); map.getSource('gf-dots').setData(d);
+}
+map.on('load', gfDraw);
+function setSpraying(on) {
+  if (on && measuring) setMeasuring(false);
+  if (on && typeof jetPick !== 'undefined' && jetPick) setJetPick(false);
+  GF.on = on; gfBox.classList.toggle('on', on);
+  if (window.sprayBtn) sprayBtn.classList.toggle('on', on);
+  map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  if (on) { map.dragPan.disable(); map.touchZoomRotate.disableRotation(); showToast('Drag to spray. Zooming still works; switch spraying off to move the map.'); }
+  else { map.dragPan.enable(); map.touchZoomRotate.enableRotation(); }
+  gfDraw();
+}
+function gfPoint(pt) {
+  const ll = map.unproject(pt), s = GF.cur;
+  if (!ll || !isFinite(ll.lat)) return;
+  const p = [+ll.lng.toFixed(7), +ll.lat.toFixed(7)];
+  s.p.push(p);
+  // droplets: a few small dots scattered around the nozzle (in pixels, then onto the ground)
+  const n = 2 + Math.round(GF.w / 10);
+  for (let i = 0; i < n; i++) {
+    const r = GF.w * (0.3 + Math.random() * 0.5), a = Math.random() * Math.PI * 2;
+    const q = map.unproject([pt.x + Math.cos(a) * r, pt.y + Math.sin(a) * r]);
+    if (q && isFinite(q.lat)) s.d.push([+q.lng.toFixed(7), +q.lat.toFixed(7), +(GF.w * (0.04 + Math.random() * 0.1)).toFixed(2)]);   // droplet radius, px at that zoom
+  }
+}
+function gfStart(pt) {
+  GF.cur = { c: GF.c, w: GF.w / 2, z: +map.getZoom().toFixed(3), p: [], d: [] };   // w = line width at that zoom
+  GF.strokes.push(GF.cur); GF.last = pt; gfPoint(pt); gfDraw();
+}
+function gfMove(pt) {
+  if (!GF.cur) return;
+  if (Math.hypot(pt.x - GF.last.x, pt.y - GF.last.y) < Math.max(2, GF.w / 6)) return;
+  GF.last = pt; gfPoint(pt); gfDraw();
+}
+function gfEnd() { if (!GF.cur) return; GF.cur = null; gfSave(); }
+const gfCanvas = map.getCanvasContainer();
+gfCanvas.addEventListener('mousedown', e => { if (!GF.on || e.button !== 0) return; e.stopPropagation(); const r = gfCanvas.getBoundingClientRect(); gfStart({ x: e.clientX - r.left, y: e.clientY - r.top }); }, true);
+window.addEventListener('mousemove', e => { if (!GF.cur) return; const r = gfCanvas.getBoundingClientRect(); gfMove({ x: e.clientX - r.left, y: e.clientY - r.top }); });
+window.addEventListener('mouseup', gfEnd);
+gfCanvas.addEventListener('touchstart', e => { if (!GF.on || e.touches.length !== 1) return; const r = gfCanvas.getBoundingClientRect(), t = e.touches[0]; e.preventDefault(); e.stopPropagation(); gfStart({ x: t.clientX - r.left, y: t.clientY - r.top }); }, { capture: true, passive: false });
+gfCanvas.addEventListener('touchmove', e => { if (!GF.cur) return; if (e.touches.length !== 1) { gfEnd(); return; } const r = gfCanvas.getBoundingClientRect(), t = e.touches[0]; e.preventDefault(); gfMove({ x: t.clientX - r.left, y: t.clientY - r.top }); }, { capture: true, passive: false });
+gfCanvas.addEventListener('touchend', gfEnd, true);
+document.addEventListener('keydown', e => { if (GF.on && e.key === 'Escape') setSpraying(false); });
 function setMeasuring(on) {
   measuring = on; mBox.classList.toggle('on', on);
-  const vc = document.querySelector('.viewctrl'); const rb = vc && vc.querySelector('button:last-child'); if (rb) rb.classList.toggle('on', on);
+  if (on && GF.on) setSpraying(false);
+  if (window.rulerBtn) rulerBtn.classList.toggle('on', on);
   map.getCanvas().style.cursor = on ? 'crosshair' : '';
   if (on) { map.doubleClickZoom.disable(); popup.remove(); } else { map.doubleClickZoom.enable(); clearMeasure(); }
   drawMeasure();
