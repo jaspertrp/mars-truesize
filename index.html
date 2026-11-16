@@ -2944,6 +2944,7 @@ function stopDrive() {
   if (!BG.on) return;
   BG.on = false; cancelAnimationFrame(BG.raf); BG.keys = {};
   if (BG.kind === 'msl') roverUrl(null);
+  for (const l of ['ph-cone', 'ph-cone-line', 'ph-cone-hi']) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', 'visible'); MSL.conesOn = undefined;
   document.body.classList.remove('driving', 'rover');
   setTimeout(updateDriveHere, 1000);
   HANDLERS.forEach(hn => map[hn].enable());
@@ -3090,14 +3091,14 @@ function photoToward(lngLat) {
   return inBest >= 0 ? inBest : bs < 3 ? best : -1;
 }
 map.on('click', e => {
-  if (!MSL.stops || MSL.open < 0) return;
+  if (!MSL.stops || MSL.open < 0 || (BG.on && MSL.conesOn === false)) return;
   const ids = ['msl-stop', 'msl-stop-open', 'msl-stop-next'].filter(l => map.getLayer(l));
   const box = [[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]];
   if (map.queryRenderedFeatures(box, { layers: ids }).length) return;   // a stop dot (or its ring): that opens the stop's story, not a photo
   const k = photoToward(e.lngLat); if (k >= 0) phOpen(k);
 });
 map.on('mousemove', e => {
-  if (!MSL.stops || MSL.open < 0 || !PH.items.length) return;
+  if (!MSL.stops || MSL.open < 0 || !PH.items.length || (BG.on && MSL.conesOn === false)) return;
   const ids = ['msl-stop', 'msl-stop-open', 'msl-stop-next'].filter(l => map.getLayer(l));
   if (map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], { layers: ids }).length) { if (MSL.hov !== -1) { MSL.hov = -1; phHighlight(-1); } return; }
   const k = photoToward(e.lngLat); if (k !== MSL.hov) { MSL.hov = k; phHighlight(k); map.getCanvas().style.cursor = k >= 0 ? 'pointer' : ''; }
@@ -3118,6 +3119,10 @@ function roverStops(ll) {
   MSL.stops.forEach((s, i) => { const d = mDist(p, [s.lon, s.lat]); if (d < bd) { bd = d; best = i; } });
   if (bd < arr) { if (MSL.inside !== best) { MSL.inside = best; BG.lastStop = best; openStop(best); } }
   else if (bd > arr * 1.6) MSL.inside = -1;
+  // the open stop's view cones only while you're near it: driving away, they'd cover the ground you drive over
+  const os = MSL.stops[MSL.open], near = !os || mDist(p, [os.lon, os.lat]) < Math.max(25, BG.V.len * BG.S * 2);
+  if (near !== MSL.conesOn) { MSL.conesOn = near; for (const l of ['ph-cone', 'ph-cone-line', 'ph-cone-hi']) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', near ? 'visible' : 'none'); }
+  if (!near && MSL.hov >= 0) { MSL.hov = -1; phHighlight(-1); }
   const n = MSL.stops.length, nx = Math.min((BG.lastStop ?? 0) + 1, n - 1), s = MSL.stops[nx];
   if (map.getLayer('msl-stop-next')) map.setFilter('msl-stop-next', ['==', ['get', 'i'], BG.lastStop === n - 1 ? -1 : nx]);
   const el = document.getElementById('hNext');
