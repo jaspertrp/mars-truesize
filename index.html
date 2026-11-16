@@ -2175,7 +2175,9 @@ function makeRoverLayer() {
       const z = map.getZoom(), mainM = new T.Matrix4().fromArray(args.defaultProjectionData.mainMatrix);
       let any = false;
       for (const { r, h } of items) {
-        const ll = [r.lon, r.lat], g = HAS_TERRAIN && map.getTerrain() ? (map.queryTerrainElevation(ll) || 0) : 0;
+        const ll = [r.lon, r.lat]; h.userData = null;
+        let g = 0;   // (MapLibre throws for far-away points above zoom 18, which would stop the whole frame being drawn)
+        if (HAS_TERRAIN && map.getTerrain()) { if (z > 18 && mDist(ll, [map.getCenter().lng, map.getCenter().lat]) > 3000) continue; try { g = map.queryTerrainElevation(ll) || 0; } catch (e) { continue; } }
         const mc = maplibregl.MercatorCoordinate.fromLngLat(ll, g), mu = mc.meterInMercatorCoordinateUnits();
         const mpp = 40075016.686 * Math.cos(r.lat * D2R) / (512 * 2 ** z);                // map metres per pixel
         const S = Math.max(1, 44 * mpp / (ROVER_LEN[r.k] * BODY_SCALE));                  // at least ~44 px long
@@ -2184,7 +2186,7 @@ function makeRoverLayer() {
       if (!any) return;
       renderer.resetState();
       for (const { r, h } of items) {
-        if (r.n === 'Curiosity' && BG.on && BG.kind === 'msl') continue;   // you're driving it
+        if (!h.userData || (r.n === 'Curiosity' && BG.on && BG.kind === 'msl')) continue;   // out of reach, or you're driving it
         const { mc, mu, k } = h.userData;
         for (const o of items) o.h.visible = o.h === h;
         h.scale.setScalar(k);
