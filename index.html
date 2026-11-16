@@ -680,6 +680,24 @@ async function encodeHeightPNG(rgba, w, h) {
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out.buffer;
 }
+// The detailed Gale terrain needs the terrain source to go up to zoom 15, but that also makes the map load zoom-15
+// terrain tiles everywhere else (towards the horizon in a tilted view, thousands of them), which can run a browser tab
+// out of memory. So the source only goes that deep while you're looking at Gale, and is swapped back afterwards.
+function demMaxFor() {
+  if (!MARS) return 7;
+  const c = map.getCenter(), b = GALE_DEM.b, m = 0.25;
+  return map.getZoom() >= 9.5 && c.lng > b[0] - m && c.lng < b[2] + m && c.lat > b[1] - m && c.lat < b[3] + m ? GALE_DEM.z1 : 7;
+}
+function updateDemMax() {
+  const src = map.getSource('dem'), want = demMaxFor();
+  if (!src || src.maxzoom === want) return;
+  if (!map.isStyleLoaded()) { if (!updateDemMax.wait) { updateDemMax.wait = true; map.once('idle', () => { updateDemMax.wait = false; updateDemMax(); }); } return; }
+  const t = map.getTerrain();
+  if (t) map.setTerrain(null);
+  map.removeSource('dem');
+  map.addSource('dem', { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: want });
+  if (t) map.setTerrain(t);
+}
 maplibregl.addProtocol('dem', async params => {
   const [zz, xx, yy] = params.url.replace('dem://', '').split('/').map(Number);
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
@@ -759,7 +777,7 @@ const map = new maplibregl.Map({
       outlines: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       grid: { type: 'geojson', data: makeGrid() },
       measure: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: MARS ? GALE_DEM.z1 : 7 }
+      dem: { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: 7 }
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#e9e2dc' } },
@@ -777,6 +795,7 @@ const map = new maplibregl.Map({
     ]
   }
 });
+if (MARS) { map.on('moveend', updateDemMax); map.on('load', updateDemMax); }
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
 // ---------- flattened globe (Jupiter) ----------
