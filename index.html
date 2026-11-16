@@ -2886,6 +2886,8 @@ async function startDrive(kind = 'buggy') {
   map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
   map.setMaxZoom(21);
   buggyPrev.sky = map.getSky();
+  // the map's dark background shows as a black line where the terrain ends at the horizon: paint it the haze colour
+  if (!MOON && map.getLayer('bg')) { buggyPrev.bg = map.getPaintProperty('bg', 'background-color'); map.setPaintProperty('bg', 'background-color', '#d8b48e'); }
   map.setSky(MOON ? { 'sky-color': '#000000', 'horizon-color': '#0b0b0d', 'fog-color': '#000000', 'sky-horizon-blend': 0.1, 'horizon-fog-blend': 0.2, 'fog-ground-blend': 1, 'atmosphere-blend': 0 }
     : { 'sky-color': '#c49a72', 'horizon-color': '#e3c4a0', 'fog-color': '#d8b48e', 'sky-horizon-blend': 0.5, 'horizon-fog-blend': 0.15, 'fog-ground-blend': 0.985, 'atmosphere-blend': 0 });   // butterscotch Mars sky; only a thin haze right at the horizon, like the rover's photos
   HANDLERS.forEach(hn => map[hn].disable());
@@ -2930,6 +2932,7 @@ function stopDrive() {
   const back = BG.offMarkers || []; BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
   map.setSky(buggyPrev.sky || {});
+  if (buggyPrev.bg !== undefined && map.getLayer('bg')) { map.setPaintProperty('bg', 'background-color', buggyPrev.bg); buggyPrev.bg = undefined; }
   if (proj !== 'mercator') map.setProjection({ type: proj });
   applyTerrain(false);
   map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 16), duration: 800 });
