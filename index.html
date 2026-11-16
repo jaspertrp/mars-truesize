@@ -505,14 +505,18 @@ async function renderEq(bm, z, x, y, isRef) {
       ictx.drawImage(img, px, py);
       // some maps (the MOLA relief) have a strip of black pixel columns at their east edge, 180°, a few to a few
       // dozen pixels wide: cover it with the last good column so no dark line runs down the planet
-      if (B.trimEast && ((c % cols) + cols) % cols === cols - 1) {
-        const d = ictx.getImageData(px + ts - 64, py, 64, ts).data;
-        let k = 0;                       // how many columns at the east edge are (nearly) black
-        for (let x = 63; x >= 0; x--) {
-          let s = 0; for (let yy = 0; yy < ts; yy += 4) { const q = (yy * 64 + x) * 4; s += d[q] + d[q + 1] + d[q + 2]; }
-          if (s / (ts / 4) / 3 > 14) break; k++;
+      const cc = ((c % cols) + cols) % cols;
+      if (B.trimEast && (cc === cols - 1 || cc === 0)) {
+        const east = cc === cols - 1, d = ictx.getImageData(east ? px + ts - 64 : px, py, 64, ts).data;
+        const colMean = x => { let s = 0; for (let yy = 0; yy < ts; yy += 4) { const q = (yy * 64 + x) * 4; s += d[q] + d[q + 1] + d[q + 2]; } return s / (ts / 4) / 3; };
+        const ref = east ? (colMean(0) + colMean(4) + colMean(8)) / 3 : (colMean(63) + colMean(59) + colMean(55)) / 3;
+        let k = 0;                       // columns at the edge that are clearly darker than the map next to them
+        for (let i = 0; i < 48; i++) { if (colMean(east ? 63 - i : i) > 0.9 * ref) break; k++; }
+        if (k > 0) k += 1;               // and one more, for the soft edge
+        if (k > 0 && k < 48) {
+          if (east) ictx.drawImage(img, ts - k - 1, 0, 1, ts, px + ts - k - 1, py, k + 1, ts);
+          else ictx.drawImage(img, k, 0, 1, ts, px, py, k + 1, ts);
         }
-        if (k > 0 && k < 64) ictx.drawImage(img, ts - k - 1, 0, 1, ts, px + ts - k - 1, py, k + 1, ts);
       }
       return true;
     }));
