@@ -2928,7 +2928,7 @@ const fmtM = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000
 async function loadMsl() {
   if (!MARS) return false;
   if (MSL.stops) return true;
-  if (!MSL.p) MSL.p = fetch(new URL('msl-stops.json', location.href).href).then(r => r.json()).catch(() => null);
+  if (!MSL.p) MSL.p = fetch(new URL('msl-stops.json', location.href).href, { cache: 'no-cache' }).then(r => r.json()).catch(() => null);
   const d = await MSL.p; if (!d) { MSL.p = null; return false; }
   if (MSL.stops) return true;
   MSL.stops = d.stops; MSL.route = d.route;
