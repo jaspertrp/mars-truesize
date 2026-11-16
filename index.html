@@ -553,11 +553,9 @@ function getDem(z, r, c) {
   if (p) { demCache.delete(key); demCache.set(key, p); return p; }
   if (MOON) {
     p = fetch(new URL(`moon-dem/${z}/${r}/${c}.webp`, location.href).href).then(res => res.ok ? res.blob() : null)
-      .then(b => b && createImageBitmap(b)).then(img => {
+      .then(b => b && createImageBitmap(b, NO_COLOR_MGMT)).then(img => {
         if (!img) return null;
-        const cv = new OffscreenCanvas(img.width, img.height), cx = cv.getContext('2d', { willReadFrequently: true });
-        cx.drawImage(img, 0, 0);
-        const d = cx.getImageData(0, 0, img.width, img.height).data, px = new Float32Array(img.width * img.height);
+        const d = rawPixels(img), px = new Float32Array(img.width * img.height);
         for (let i = 0; i < px.length; i++) px[i] = (d[i * 4] * 256 + d[i * 4 + 1]) / 2 - 10000;   // half-metres → metres
         return { w: img.width, h: img.height, px };
       }).catch(() => null);
@@ -591,6 +589,24 @@ function poleHeight() {          // mean height of the outer 2.5° around each p
 // Gale crater: the USGS 1 m MSL Gale Merged DEM (HiRISE/CTX/HRSC stereo, Parker & Calef) around Curiosity's route,
 // cut into our own tiles (gale-dem/, zoom 10-15, ~1.3 m per pixel; tools/build_gale_dem.py). Inside that area those
 // heights replace the 200 m global DEM, blended over the last 300 m to the edge so there is no step.
+// Heights are stored in image colours, so they must be decoded with no colour management: some browsers/screens
+// otherwise shift the colours a little, and one step in the high byte is 25.6 m (that showed up as tall spikes).
+const NO_COLOR_MGMT = { colorSpaceConversion: 'none', premultiplyAlpha: 'none' };
+function rawPixels(img) {
+  const cv = new OffscreenCanvas(img.width, img.height), cx = cv.getContext('2d', { willReadFrequently: true, colorSpace: 'srgb' });
+  cx.drawImage(img, 0, 0);
+  return cx.getImageData(0, 0, img.width, img.height, { colorSpace: 'srgb' }).data;
+}
+// safety net: a pixel more than lim metres from all four neighbours (which agree with each other) is replaced by their mean
+function despike(px, w, h, lim) {
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x, v = px[i]; if (v !== v) continue;
+    const a = px[i - 1], b = px[i + 1], c = px[i - w], d = px[i + w];
+    if (!(a === a && b === b && c === c && d === d)) continue;
+    const m = (a + b + c + d) / 4;
+    if (Math.abs(v - m) > lim && Math.max(a, b, c, d) - Math.min(a, b, c, d) < lim) px[i] = m;
+  }
+}
 const GALE_DEM = { b: [137.3267066, -4.8755976, 137.4785926, -4.5551068], z0: 10, z1: 15, blend: 300 };
 const galeCache = new Map();
 function galeDem(z, x, y) {
@@ -599,13 +615,12 @@ function galeDem(z, x, y) {
   const key = z + '/' + x + '/' + y;
   if (!galeCache.has(key)) {
     galeCache.set(key, fetch(new URL(`gale-dem/${key}.webp`, location.href).href).then(r => r.ok ? r.blob() : null)
-      .then(bl => bl && createImageBitmap(bl)).then(img => {
+      .then(bl => bl && createImageBitmap(bl, NO_COLOR_MGMT)).then(img => {
         if (!img) return null;
-        const cv = new OffscreenCanvas(img.width, img.height), cx = cv.getContext('2d', { willReadFrequently: true });
-        cx.drawImage(img, 0, 0);
-        const d = cx.getImageData(0, 0, img.width, img.height).data, px = new Float32Array(img.width * img.height);
-        for (let i = 0; i < px.length; i++) { const v = d[i * 4] * 256 + d[i * 4 + 1]; px[i] = v ? v / 10 - 5000 : NaN; }
-        return { w: img.width, px };
+        const d = rawPixels(img), w = img.width, n = w * img.height, px = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const v = d[i * 4] * 256 + d[i * 4 + 1]; px[i] = v ? v / 10 - 5000 : NaN; }
+        despike(px, w, img.height, 40);
+        return { w, px };
       }).catch(() => null));
     if (galeCache.size > 120) galeCache.delete(galeCache.keys().next().value);
   }
