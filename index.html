@@ -128,6 +128,22 @@
   #phBox img{max-width:94vw;max-height:84vh;border-radius:6px}
   #phCap{color:#ddd;font-size:12px;text-align:center}
   #phCap a{color:var(--accent)}
+  #stopCard{position:fixed;left:14px;top:14px;width:min(360px,calc(100vw - 28px));max-height:calc(100vh - 190px);overflow:auto;background:rgba(20,14,12,.93);border:1px solid var(--line);border-radius:12px;padding:12px 14px;z-index:30;display:none;color:var(--text);font-size:13px;line-height:1.45;backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  #stopCard.on{display:block}
+  #stopCard .sc-n{display:inline-block;min-width:20px;height:20px;border-radius:10px;background:#4fd1ff;color:#08202b;font:700 12px/20px 'Space Grotesk',system-ui,sans-serif;text-align:center;margin-right:6px}
+  #stopCard h3{margin:0 0 2px;font:600 16px/1.25 'Space Grotesk',system-ui,sans-serif;display:flex;align-items:center}
+  #stopCard h3 button{margin-left:auto;background:none;border:0;color:var(--muted);cursor:pointer;font-size:15px}
+  #stopCard .sc-sub{color:var(--muted);font-size:11.5px;margin-bottom:8px}
+  #stopCard p{margin:0 0 8px}
+  #stopCard a{color:var(--accent)}
+  #stopCard .sc-ph{color:var(--muted);font-size:11.5px;margin:8px 0 4px}
+  #scThumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px}
+  #scThumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:2px solid transparent;cursor:pointer;opacity:.85;background:#2a1d18}
+  #scThumbs img.hi,#scThumbs img:hover{opacity:1;outline:2px solid #fff}
+  .hud #hStopRow{display:none;margin-top:8px;gap:10px;align-items:center;justify-content:center;border-top:1px solid var(--line);padding-top:8px}
+  body.rover .hud #hStopRow{display:flex}
+  .hud #hNext{min-width:300px;text-align:center} .hud #hNext b{color:#4fd1ff}
+  .hud #hArrow{display:inline-block;color:#4fd1ff;font-size:18px;line-height:1;transition:transform .15s linear}
   .site{position:relative;display:block;font-size:10px;font-weight:500;color:#ffe0c9;white-space:nowrap;padding-left:10px;text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none}
   .site::before{content:'';position:absolute;left:0;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:#ffd27a;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
   .cname{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 7px #000}
@@ -244,7 +260,8 @@
     <div class="sz" id="hSpeedSel" title="Top speed (keys 1–4). Shift boosts 3× on top"><button type="button" data-m="1">Speed 1&times;</button><button type="button" data-m="4">4&times;</button><button type="button" data-m="15">15&times;</button><button type="button" data-m="50">50&times;</button></div>
     <button type="button" class="exit" id="hExit">Stop driving</button>
   </div>
-  <div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
+  <div class="row" id="hStopRow"><button type="button" class="exit" id="hPrev" title="Back to the previous stop (B)">&#9198; Back</button><span id="hNext"></span><button type="button" class="exit" id="hNextB" title="Jump to the next stop (N)">Next stop &#9197;</button></div>
+  <div class="keys" id="hKeys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
 </div>
 <div class="jhud" id="jhud" role="region" aria-label="Fighter jet">
   <div class="row">
@@ -262,6 +279,7 @@
 <div class="pad" id="pad"><span></span><button type="button" data-k="up">&#9650;</button><button type="button" data-k="hop">&#11014;</button><button type="button" data-k="left">&#9664;</button><button type="button" data-k="down">&#9660;</button><button type="button" data-k="right">&#9654;</button></div>
 <div class="coords" id="coords"></div>
 <div class="toast" id="toast"></div>
+<div id="stopCard" role="dialog" aria-label="Stop on Curiosity's route"></div>
 <div class="cmp" id="cmp" role="dialog" aria-label="Compare sizes">
   <div class="cmpbox">
     <button type="button" class="cmpx" id="cmpX" aria-label="Close">&times;</button>
@@ -689,9 +707,14 @@ function demMaxFor() {
   return map.getZoom() >= 9.5 && c.lng > b[0] - m && c.lng < b[2] + m && c.lat > b[1] - m && c.lat < b[3] + m ? GALE_DEM.z1 : 7;
 }
 function updateDemMax() {
-  const src = map.getSource('dem'), want = demMaxFor();
+  if (BG.on || FL.on) return;               // never swap terrain under a moving vehicle; done again when it stops
+  setDemMax(demMaxFor());
+}
+function setDemMax(want) {
+  const src = map.getSource('dem');
   if (!src || src.maxzoom === want) return;
-  if (!map.isStyleLoaded()) { if (!updateDemMax.wait) { updateDemMax.wait = true; map.once('idle', () => { updateDemMax.wait = false; updateDemMax(); }); } return; }
+  // the style must have finished loading (not its tiles: while driving they never all have)
+  if (!map.style || !map.style._loaded) { setDemMax.want = want; if (!setDemMax.wait) { setDemMax.wait = true; map.once('styledata', () => { setDemMax.wait = false; setDemMax(setDemMax.want); }); } return; }
   const t = map.getTerrain();
   if (t) map.setTerrain(null);
   map.removeSource('dem');
@@ -1860,12 +1883,25 @@ function closePhotos() {
   phEl.classList.remove('on'); PH.open = false;
   if (map.getSource('ph-cones')) map.getSource('ph-cones').setData({ type: 'FeatureCollection', features: [] });
 }
-function phHighlight(i) { if (map.getLayer('ph-cone-hi')) map.setFilter('ph-cone-hi', ['==', ['get', 'i'], i]); document.querySelectorAll('#phStrip img').forEach(e => e.classList.toggle('hi', +e.dataset.i === i)); }
+function phHighlight(i) { if (map.getLayer('ph-cone-hi')) map.setFilter('ph-cone-hi', ['==', ['get', 'i'], i]); document.querySelectorAll('#phStrip img,#scThumbs img').forEach(e => e.classList.toggle('hi', +e.dataset.i === i)); }
+const lookTxt = g => `looking ${Math.round((g.az + 360) % 360)}° (${g.el >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(g.el))}°), ${g.hfov < 3 ? g.hfov.toFixed(1) : Math.round(g.hfov)}° wide`;
 function phOpen(i) {
   const it = PH.items[i]; if (!it) return;
-  document.getElementById('phBig').src = it.im.image_files.large || it.im.image_files.medium;
-  document.getElementById('phCap').innerHTML = `${PH_CAMS[it.im.camera.instrument].n} · sol ${it.im.sol} · looking ${Math.round((it.g.az + 360) % 360)}° (${it.g.el >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(it.g.el))}°), ${Math.round(it.g.hfov)}° wide · <a href="${it.im.link}" target="_blank" rel="noopener">NASA page</a> · NASA/JPL-Caltech${/MCZ/.test(it.im.camera.instrument) ? '/ASU' : ''}`;
+  document.getElementById('phBig').src = it.src;
+  document.getElementById('phCap').innerHTML = it.cap;
   phBox.classList.add('on'); phHighlight(i);
+}
+// the view cones of the photos in PH.items, each from where its rover stood
+function drawCones(fit) {
+  const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => ({ type: 'Feature',
+    properties: { i, c: it.c }, geometry: { type: 'Polygon', coordinates: [conePoly(it.lon, it.lat, it.g)] } })) };
+  if (!map.getSource('ph-cones')) {
+    map.addSource('ph-cones', { type: 'geojson', data: fc });
+    map.addLayer({ id: 'ph-cone', type: 'fill', source: 'ph-cones', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.08 } });
+    map.addLayer({ id: 'ph-cone-line', type: 'line', source: 'ph-cones', paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.35, 'line-width': 0.8 } });
+    map.addLayer({ id: 'ph-cone-hi', type: 'fill', source: 'ph-cones', filter: ['==', ['get', 'i'], -1], paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.55 } });
+    map.on('click', 'ph-cone', e => { const f = e.features && e.features[e.features.length - 1]; if (f) phOpen(f.properties.i); });
+  } else map.getSource('ph-cones').setData(fc);
 }
 async function showPhotos(sol, lon, lat) {
   if (!PH.tracks) PH.tracks = (await fetch(new URL('rover-tracks.geojson', location.href).href).then(r => r.json())).features
@@ -1888,23 +1924,17 @@ async function showPhotos(sol, lon, lat) {
   PH.items = ims.filter(im => im.sample_type === 'Full' && im.image_files && im.image_files.small)
     .map(im => ({ im, g: photoGeom(im) })).filter(it => it.g && it.g.el < 50)   // skip sky / sun shots: no place on the map
     .filter(it => { const k = it.im.camera.instrument + Math.round(it.g.az / 3) + ':' + Math.round(it.g.el / 3) + ':' + it.im.sol; if (seen.has(k)) return false; seen.add(k); return true; })
-    .slice(0, 120);
+    .slice(0, 120)
+    .map(it => ({ ...it, lon, lat, c: PH_CAMS[it.im.camera.instrument].c, src: it.im.image_files.large || it.im.image_files.medium, thumb: it.im.image_files.small,
+      cap: `${PH_CAMS[it.im.camera.instrument].n} · sol ${it.im.sol} · ${lookTxt(it.g)} · <a href="${it.im.link}" target="_blank" rel="noopener">NASA page</a> · NASA/JPL-Caltech${/MCZ/.test(it.im.camera.instrument) ? '/ASU' : ''}` }));
   document.getElementById('phSub').textContent = `sol ${sol}${sol2 > sol ? '–' + sol2 : ''} · ${PH.items.length} photo${PH.items.length === 1 ? '' : 's'} · hover to see where it looks, click to enlarge`;
   PH.items.forEach((it, i) => {
-    const t = document.createElement('img'); t.src = it.im.image_files.small; t.loading = 'lazy'; t.dataset.i = i;
+    const t = document.createElement('img'); t.src = it.thumb; t.loading = 'lazy'; t.dataset.i = i;
     t.style.borderColor = PH_CAMS[it.im.camera.instrument].c; t.title = `${PH_CAMS[it.im.camera.instrument].n} · sol ${it.im.sol}`;
     t.onmouseenter = () => phHighlight(i); t.onclick = () => phOpen(i);
     strip.appendChild(t);
   });
-  const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => ({ type: 'Feature',
-    properties: { i, c: PH_CAMS[it.im.camera.instrument].c }, geometry: { type: 'Polygon', coordinates: [conePoly(lon, lat, it.g)] } })) };
-  if (!map.getSource('ph-cones')) {
-    map.addSource('ph-cones', { type: 'geojson', data: fc });
-    map.addLayer({ id: 'ph-cone', type: 'fill', source: 'ph-cones', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.08 } });
-    map.addLayer({ id: 'ph-cone-line', type: 'line', source: 'ph-cones', paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.35, 'line-width': 0.8 } });
-    map.addLayer({ id: 'ph-cone-hi', type: 'fill', source: 'ph-cones', filter: ['==', ['get', 'i'], -1], paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.55 } });
-    map.on('click', 'ph-cone', e => { const f = e.features && e.features[e.features.length - 1]; if (f) phOpen(f.properties.i); });
-  } else map.getSource('ph-cones').setData(fc);
+  drawCones();
   if (map.getZoom() < 17) map.easeTo({ center: [lon, lat], zoom: 17.5, duration: 1200 });
 }
 // ---------- rover tracks (Mars) ----------
@@ -2039,7 +2069,8 @@ function makeRoverLayer() {
       }
       if (!any) return;
       renderer.resetState();
-      for (const { h } of items) {
+      for (const { r, h } of items) {
+        if (r.n === 'Curiosity' && BG.on && BG.kind === 'msl') continue;   // you're driving it
         const { mc, mu, k } = h.userData;
         for (const o of items) o.h.visible = o.h === h;
         h.scale.setScalar(k);
@@ -2427,8 +2458,26 @@ document.addEventListener('keydown', e => {
 // its speeds and gravity scale with it, so it handles the same at every size.
 const LRV = { len: 3.1, track: 1.83, base: 2.29, wheelR: 0.405, wheelW: 0.23, vmax: 13 / 3.6 };   // Apollo LRV: 13 km/h
 const G_MOON = MOON ? 1.62 : 3.72;   // surface gravity of the world you drive on (Moon or Mars)
-const BG = { on: false, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
-try { const s = +localStorage.getItem('moon-buggy-size'); if ([1, 10, 40].includes(s)) BG.S = s; const m = +localStorage.getItem('buggy-speed'); if ([1, 4, 15, 50].includes(m)) BG.M = m; } catch (e) {}
+// Curiosity ("rover" in the search box): 3 m long, 2.8 m wide, 50 cm wheels; it tops out at about 4 cm/s.
+// Its speeds don't grow with the size it is drawn at (unlike the buggy), so "Real" really is 4 cm/s.
+const MSLV = { len: 3.0, track: 2.25, base: 2.2, wheelR: 0.25, wheelW: 0.4, vmax: 0.04 };
+const VKIND = {
+  buggy: { V: LRV, sizes: [[1, 'Real size'], [10, '10&times;'], [40, '40&times;']], speeds: [[1, 'Speed 1&times;'], [4, '4&times;'], [15, '15&times;'], [50, '50&times;']], S: 10, M: 4, kS: 'moon-buggy-size', kM: 'buggy-speed' },
+  msl: { V: MSLV, sizes: [[5, 'Size 5&times;'], [15, '15&times;'], [40, '40&times;']], speeds: [[1, 'Real speed'], [30, '30&times;'], [300, '300&times;'], [1500, '1500&times;']], S: 15, M: 300, kS: 'rover-size', kM: 'rover-speed' }
+};
+const BG = { on: false, kind: 'buggy', V: LRV, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
+function loadKind(kind) {
+  const K = VKIND[kind]; BG.kind = kind; BG.V = K.V; BG.S = K.S; BG.M = K.M;
+  try { const s = +localStorage.getItem(K.kS); if (K.sizes.some(x => x[0] === s)) BG.S = s; const m = +localStorage.getItem(K.kM); if (K.speeds.some(x => x[0] === m)) BG.M = m; } catch (e) {}
+  document.getElementById('hSize').innerHTML = K.sizes.map(([v, l]) => `<button type="button" data-s="${v}">${l}</button>`).join('');
+  document.getElementById('hSpeedSel').innerHTML = K.speeds.map(([v, l]) => `<button type="button" data-m="${v}">${l}</button>`).join('');
+  document.querySelectorAll('#hSize button').forEach(b => b.onclick = () => { setBuggySize(+b.dataset.s); b.blur(); });
+  document.querySelectorAll('#hSpeedSel button').forEach(b => b.onclick = () => { setBuggySpeed(+b.dataset.m); b.blur(); });
+  document.getElementById('hud').setAttribute('aria-label', kind === 'msl' ? 'Curiosity rover' : 'Moon buggy');
+  document.getElementById('hKeys').innerHTML = kind === 'msl'
+    ? '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer (turns on the spot when stopped) &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> speed &middot; <kbd>N</kbd> / <kbd>B</kbd> next / previous stop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>Esc</kbd> stop'
+    : '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop';
+}
 let THREE = null, buggyLayer = null, buggyPrev = null;
 const driveBtn = document.getElementById('driveBtn'), hudEl = document.getElementById('hud');
 const DRIVE_LABEL = MOON ? '&#128665; Drive the moon buggy' : '&#128665; Drive a buggy on Mars';
@@ -2483,13 +2532,16 @@ function makeBuggyLayer() {
   scene.add(new T.HemisphereLight(0xffffff, 0x444444, 0.9));
   const sun = new T.DirectionalLight(0xffffff, 2.6); sun.position.set(0.6, 0.35, 0.75); scene.add(sun);
   const bug = buildBuggy(); scene.add(bug.root);
+  const rov = { root: new T.Group(), body: null, wheels: [] }; rov.root.rotation.order = 'ZXY';
+  rov.body = buildRover(T, 'msl', 0xd9c7b0); rov.root.add(rov.body); rov.root.visible = false; scene.add(rov.root);
+  BG.buggyModel = bug; BG.roverModel = rov;
   // dust: no air on the Moon, so every grain flies on a clean parabola and drops straight back down
   const dust = [], dgeo = new T.IcosahedronGeometry(1, 0);
   for (let i = 0; i < 90; i++) {
     const m = new T.Mesh(dgeo, new T.MeshBasicMaterial({ color: MOON ? 0xbdb6ad : 0xc08a5e, transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; scene.add(m); dust.push({ m, v: new T.Vector3(), life: 0, max: 1 });
   }
-  BG.bug = bug; BG.dust = dust; BG.scene = scene;
+  BG.bug = BG.kind === 'msl' ? rov : bug; BG.dust = dust; BG.scene = scene;
   let renderer;
   return {
     id: 'buggy', type: 'custom', renderingMode: '3d',
@@ -2510,7 +2562,7 @@ function spawnDust(n, spread, up, back) {      // positions/velocities in map me
   for (let i = 0; i < n; i++) {
     const d = BG.dust.find(p => p.life <= 0); if (!d) return;
     const side = Math.random() < 0.5 ? -1 : 1, rear = back ? -Math.sign(BG.v || 1) : (Math.random() < 0.5 ? -1 : 1);
-    const lx = side * LRV.track / 2 * k, ly = rear * LRV.base / 2 * k;
+    const lx = side * BG.V.track / 2 * k, ly = rear * BG.V.base / 2 * k;
     d.m.position.set(lx * fy + ly * fx, -lx * fx + ly * fy, 0.15 * k);
     const vb = back ? -BG.v * BODY_SCALE * (0.25 + Math.random() * 0.35) : 0;
     const a = Math.random() * Math.PI * 2, r = spread * BODY_SCALE * BG.S * Math.random();
@@ -2524,16 +2576,15 @@ function setBuggySize(S) {
   const r = S / BG.S; BG.S = S; BG.v *= r; BG.vz = (BG.vz || 0) * r;
   document.querySelectorAll('#hSize button').forEach(b => b.classList.toggle('on', +b.dataset.s === S));
   if (BG.bug) BG.bug.root.scale.setScalar(BODY_SCALE * S);
+  if (BG.kind === 'msl') BG.v /= r;                     // the rover's speed doesn't scale with its size
   styleTrail();
-  try { localStorage.setItem('moon-buggy-size', S); } catch (e) {}
+  try { localStorage.setItem(VKIND[BG.kind].kS, S); } catch (e) {}
 }
-document.querySelectorAll('#hSize button').forEach(b => b.onclick = () => { setBuggySize(+b.dataset.s); b.blur(); });
 function setBuggySpeed(M) {
   BG.M = M;
   document.querySelectorAll('#hSpeedSel button').forEach(b => b.classList.toggle('on', +b.dataset.m === M));
-  try { localStorage.setItem('buggy-speed', M); } catch (e) {}
+  try { localStorage.setItem(VKIND[BG.kind].kM, M); } catch (e) {}
 }
-document.querySelectorAll('#hSpeedSel button').forEach(b => b.onclick = () => { setBuggySpeed(+b.dataset.m); b.blur(); });
 
 // tyre tracks: one line with a gap, so it draws as two wheel tracks; broken wherever the buggy was in the air
 // Tyre tracks are drawn as real-size strips on the ground (polygons), so they stay put and keep their width at
@@ -2555,7 +2606,9 @@ function drawTrail(all) {
 const HEADINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 function updateHud(ll) {
   const kmh = Math.abs(BG.v) * 3.6;
-  document.getElementById('hSpeed').innerHTML = (kmh < 10 ? kmh.toFixed(1) : Math.round(kmh)) + ' <small>km/h</small>';
+  document.getElementById('hSpeed').innerHTML = BG.kind === 'msl' && kmh < 1 ? Math.round(Math.abs(BG.v) * 100) + ' <small>cm/s</small>'
+    : (kmh < 10 ? kmh.toFixed(1) : Math.round(kmh)) + ' <small>km/h</small>';
+  if (BG.kind === 'msl') roverStops(ll);
   document.getElementById('hDist').textContent = fmtKm(BG.dist / 1000);
   document.getElementById('hHead').textContent = HEADINGS[Math.round(((BG.heading % 360) + 360) % 360 / 45) % 8];
   const lon = wrapLon(ll.lng), lat = ll.lat;
@@ -2566,7 +2619,7 @@ function driveStep(t) {
   if (!BG.on) return;
   BG.raf = requestAnimationFrame(driveStep);
   const dt = Math.min(0.05, (t - (BG.t || t)) / 1000) || 0.016; BG.t = t;
-  const k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1, vb = LRV.vmax * S * BG.M;   // vb: top speed without boost
+  const R = BG.kind === 'msl', k = BG.keys, S = BG.S, boost = k.boost ? 3 : 1, vb = BG.V.vmax * (R ? 1 : S) * BG.M;   // vb: top speed without boost
   const vmax = vb * boost, acc = vb * 0.6 * (k.boost ? 2.2 : 1), brake = vb * 1.6;
   const thr = (k.up ? 1 : 0) - (k.down ? 1 : 0), steerIn = (k.right ? 1 : 0) - (k.left ? 1 : 0);
   const mc0 = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), mu = mc0.meterInMercatorCoordinateUnits();
@@ -2575,13 +2628,14 @@ function driveStep(t) {
     if (thr > 0) BG.v += (BG.v < 0 ? brake : acc) * dt;
     else if (thr < 0) BG.v -= (BG.v > 0 ? brake : acc * 0.6) * dt;
     else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), vb * 0.35 * dt);
-    BG.v -= G_MOON * S * Math.sin(BG.pitch) * dt;                       // uphill slows you down
+    if (!R) BG.v -= G_MOON * S * Math.sin(BG.pitch) * dt;               // uphill slows the buggy down (the rover's motors hold their speed)
     if (BG.v > vmax) BG.v -= (BG.v - vmax) * Math.min(1, 1.5 * dt);
     if (BG.v < -vmax * 0.4) BG.v -= (BG.v + vmax * 0.4) * Math.min(1, 1.5 * dt);
-    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (LRV.vmax * S * 2));   // steer less the faster you go
+    const maxSteer = 0.55 / (1 + Math.abs(BG.v) / (R ? vb : BG.V.vmax * S * 2));   // steer less the faster you go
     BG.steer += (steerIn * maxSteer - BG.steer) * Math.min(1, dt * 6);
-    BG.heading += (BG.v / S) / LRV.base * Math.tan(BG.steer) * R2D * dt;
-    if (k.hop && !BG.air) { BG.vz = (BG.vz > 0 ? BG.vz : 0) + Math.sqrt(2 * G_MOON * BODY_SCALE * S * LRV.len * BODY_SCALE * S * 0.8); BG.air = true; k.hop = false; spawnDust(14, 0.6, 0.8, false); }
+    BG.heading += (BG.v / S) / BG.V.base * Math.tan(BG.steer) * R2D * dt;
+    if (R) BG.heading += steerIn * 35 * Math.max(0, 1 - Math.abs(BG.v) / (vb * 0.4)) * dt;   // Curiosity can turn on the spot
+    if (k.hop && !BG.air && !R) { BG.vz = (BG.vz > 0 ? BG.vz : 0) + Math.sqrt(2 * G_MOON * BODY_SCALE * S * BG.V.len * BODY_SCALE * S * 0.8); BG.air = true; k.hop = false; spawnDust(14, 0.6, 0.8, false); }
   }
   k.hop = false;
   const dMap = BG.v * dt * BODY_SCALE, h = BG.heading * D2R;
@@ -2594,7 +2648,7 @@ function driveStep(t) {
   const qElev = p => { try { return map.queryTerrainElevation(p); } catch (e) { return null; } };
   const elev = (dx, dy) => { const v = qElev([wrapLon(ll.lng + dx), ll.lat + dy]); return v == null ? (BG.g || 0) : v; };
   const g = elev(0, 0), k1 = BODY_SCALE * S, mpd = 111319.49;          // map metres per degree of latitude
-  const half = LRV.base / 2 * k1, side = LRV.track / 2 * k1, cl = Math.cos(ll.lat * D2R);
+  const half = BG.V.base / 2 * k1, side = BG.V.track / 2 * k1, cl = Math.cos(ll.lat * D2R);
   const fx = Math.sin(h), fy = Math.cos(h);
   const at = (f, r) => elev((f * fx + r * fy) / (mpd * cl), (f * fy - r * fx) / mpd);
   const pitchT = Math.atan2(at(half, 0) - at(-half, 0), 2 * half), rollT = Math.atan2(at(0, side) - at(0, -side), 2 * side);
@@ -2618,8 +2672,9 @@ function driveStep(t) {
         BG.air = BG.vz > gv + 0.01;
         if (BG.air) BG.z = g + 0.001; else BG.z = g;
       } else { BG.z = g; BG.vz = Math.max(-50 * k1, Math.min(50 * k1, gv)); }
-    } else if (BG.z > g + 0.12 * LRV.len * k1) BG.air = true;
+    } else if (BG.z > g + 0.12 * BG.V.len * k1) BG.air = true;
   }
+  if (R) { BG.z = g; BG.vz = 0; BG.air = false; }        // a one-tonne rover at walking pace doesn't leave the ground
   BG.g = g;
   const ease = Math.min(1, dt * (BG.air ? 1.5 : 8));
   BG.pitch += (pitchT - BG.pitch) * ease; BG.roll += (rollT - BG.roll) * ease;
@@ -2627,16 +2682,16 @@ function driveStep(t) {
   const bug = BG.bug;
   bug.root.rotation.set(BG.pitch, -BG.roll, -h);
   bug.root.position.z = 0;
-  for (const w of bug.wheels) { w.pivot.rotation.z = -BG.steer * (w.front ? 1 : -1); w.spin.rotation.x -= (BG.air ? 0 : BG.v) * dt / LRV.wheelR; }
+  for (const w of bug.wheels) { w.pivot.rotation.z = -BG.steer * (w.front ? 1 : -1); w.spin.rotation.x -= (BG.air ? 0 : BG.v) * dt / BG.V.wheelR; }
   // dust follows the buggy's frame: shift every grain back by how far the buggy moved
   const sx = (BG.mx - BG.pmx) / mu || 0, sy = -(BG.my - BG.pmy) / mu || 0, sz = BG.z - (BG.pz == null ? BG.z : BG.pz);
   BG.pmx = BG.mx; BG.pmy = BG.my; BG.pz = BG.z;
-  if (!BG.air && Math.abs(BG.v) > LRV.vmax * S * 0.25) { BG.dustAcc = (BG.dustAcc || 0) + dt * Math.min(60, Math.abs(BG.v) / S * 9); while (BG.dustAcc > 1) { BG.dustAcc--; spawnDust(1, 0.15, Math.abs(BG.v) / S * 0.35, true); } }
+  if (!BG.air && Math.abs(BG.v) > (R ? 2 : BG.V.vmax * S * 0.25)) { BG.dustAcc = (BG.dustAcc || 0) + dt * Math.min(60, Math.abs(BG.v) / S * 9); while (BG.dustAcc > 1) { BG.dustAcc--; spawnDust(1, 0.15, Math.abs(BG.v) / S * 0.35, true); } }
   for (const d of BG.dust) {
     if (d.life <= 0) continue;
     d.life -= dt; d.v.z -= gMap * dt;
     d.m.position.x += d.v.x * dt - sx; d.m.position.y += d.v.y * dt - sy; d.m.position.z += d.v.z * dt - sz;
-    if (d.life <= 0 || d.m.position.z < -LRV.len * k1) { d.life = 0; d.m.visible = false; continue; }
+    if (d.life <= 0 || d.m.position.z < -BG.V.len * k1) { d.life = 0; d.m.visible = false; continue; }
     d.m.material.opacity = 0.75 * Math.min(1, d.life / d.max * 2);
   }
   // --- tracks ---
@@ -2646,9 +2701,9 @@ function driveStep(t) {
     BG.tll = [ll.lng, ll.lat];
     const rx = fy / (mpd * cl), ry = -fx / mpd;                 // one map metre to the right, in degrees
     const pt = o => [ll.lng + rx * o * k1, ll.lat + ry * o * k1];
-    const tw = LRV.track / 2, ww = LRV.wheelW / 2;
+    const tw = BG.V.track / 2, ww = BG.V.wheelW / 2;
     const row = [pt(-tw - ww), pt(-tw + ww), pt(tw - ww), pt(tw + ww)];
-    if (seg.length && Math.hypot((ll.lng - BG.tll0[0]) * cl, ll.lat - BG.tll0[1]) * mpd > 50 * LRV.len * k1) seg.length = 0;   // a teleport: start fresh
+    if (seg.length && Math.hypot((ll.lng - BG.tll0[0]) * cl, ll.lat - BG.tll0[1]) * mpd > 50 * BG.V.len * k1) seg.length = 0;   // a teleport: start fresh
     seg.push(row); BG.tll0 = BG.tll;
     if (seg.length >= 150) {                                       // close this chunk; the next one starts where it ends
       BG.trail.push([row]);
@@ -2659,8 +2714,8 @@ function driveStep(t) {
   // --- chase camera ---
   let db = wrap180(BG.heading - BG.camBearing); BG.camBearing += db * Math.min(1, dt * 2.5);
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
-  const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (LRV.vmax * S * 6)));   // pull back a bit at speed
-  const lenMap = LRV.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
+  const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (R ? vb * 1.5 : BG.V.vmax * S * 6)));   // pull back a bit at speed
+  const lenMap = BG.V.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
   map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(MAXSIMZOOM, Math.max(3, z)) });
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
@@ -2673,7 +2728,8 @@ function driveKey(e) {
   if (a) { BG.keys[a] = down; e.preventDefault(); return; }
   if (!down) return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) BG.keys.hop = true; }
-  else if (/^Digit[1-4]$/.test(e.code)) setBuggySpeed([1, 4, 15, 50][+e.code.slice(5) - 1]);
+  else if (/^Digit[1-4]$/.test(e.code)) setBuggySpeed(VKIND[BG.kind].speeds[+e.code.slice(5) - 1][0]);
+  else if (BG.kind === 'msl' && (e.code === 'KeyN' || e.code === 'KeyB')) goStop(Math.max(0, Math.min(MSL.stops.length - 1, (BG.lastStop ?? 0) + (e.code === 'KeyN' ? 1 : -1))));
   else if (e.code === 'KeyC') BG.camMode = (BG.camMode + 1) % 3;
   else if (e.code === 'KeyR') { BG.trail = [[]]; BG.tll = null; drawTrail(); }
   else if (e.key === '+' || e.key === '=') BG.zoomAdj = Math.min(2, BG.zoomAdj + 0.25);
@@ -2694,8 +2750,8 @@ document.querySelectorAll('#pad button').forEach(b => {
 // buggy and jet cameras never go past this.
 const MAXSIMZOOM = 17.9;
 const HANDLERS = ['dragPan', 'dragRotate', 'scrollZoom', 'keyboard', 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'];
-async function startDrive() {
-  if (BG.on || FL.on || !HAS_TERRAIN) return;
+async function startDrive(kind = 'buggy') {
+  if (BG.on || FL.on || !HAS_TERRAIN || (kind === 'msl' && !MARS)) return;
   if (!THREE) {
     driveBtn.disabled = true; driveBtn.textContent = 'Loading the buggy…';
     try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
@@ -2703,6 +2759,10 @@ async function startDrive() {
     driveBtn.disabled = false; driveBtn.innerHTML = DRIVE_LABEL;
     if (!THREE) return;
   }
+  if (kind === 'msl' && !(await loadMsl())) { showToast("Couldn't load Curiosity's route. Check your connection and try again."); return; }
+  if (BG.on || FL.on) return;
+  loadKind(kind);
+  if (kind === 'msl') setDemMax(GALE_DEM.z1);   // the 1 m Gale terrain, wherever the camera starts
   if (measuring) setMeasuring(false);
   popup.remove();
   buggyPrev = { padding: map.getPadding(), maxZoom: map.getMaxZoom(), center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
@@ -2724,23 +2784,29 @@ async function startDrive() {
     }
   }
   if (!buggyLayer) { buggyLayer = makeBuggyLayer(); map.addLayer(buggyLayer); }
-  // start where you are looking if you are zoomed in, otherwise where the LRV first drove: Apollo 15 at Hadley Rille
-  const here = map.getZoom() >= 7, start = here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
+  BG.bug = kind === 'msl' ? BG.roverModel : BG.buggyModel;
+  BG.buggyModel.root.visible = kind !== 'msl'; BG.roverModel.root.visible = kind === 'msl';
+  // start where you are looking if you are zoomed in, otherwise where the LRV first drove: Apollo 15 at Hadley Rille.
+  // Curiosity always starts where it landed, Bradbury Landing, facing its first stop.
+  const R = kind === 'msl', st = R ? MSL.stops : null;
+  const here = !R && map.getZoom() >= 7, start = R ? new maplibregl.LngLat(st[0].lon, st[0].lat) : here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
+  const h0 = R ? bearingDeg([st[0].lon, st[0].lat], [st[1].lon, st[1].lat]) : here ? map.getBearing() : 0;
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start);
   Object.assign(BG, { on: true, mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, g: 0, vz: 0, v: 0, steer: 0, pitch: 0, roll: 0, air: false,
-    heading: here ? map.getBearing() : 0, camBearing: here ? map.getBearing() : 0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null });
+    heading: h0, camBearing: h0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null, lastStop: R ? 0 : null });
   BG.dust.forEach(d => { d.life = 0; d.m.visible = false; });
   drawTrail(); setBuggySize(BG.S); setBuggySpeed(BG.M);
-  document.body.classList.add('driving');
+  document.body.classList.add('driving'); document.body.classList.toggle('rover', R);
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
-  if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
+  if (R) { openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
+  else if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
   BG.raf = requestAnimationFrame(driveStep);
 }
 function stopDrive() {
   if (!BG.on) return;
   BG.on = false; cancelAnimationFrame(BG.raf); BG.keys = {};
-  document.body.classList.remove('driving');
+  document.body.classList.remove('driving', 'rover');
   HANDLERS.forEach(hn => map[hn].enable());
   (BG.offMarkers || []).forEach(m => m.addTo(map)); BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
@@ -2751,8 +2817,97 @@ function stopDrive() {
   map.once('moveend', () => map.setMaxZoom(buggyPrev.maxZoom));
   map.triggerRepaint();
 }
-driveBtn.onclick = startDrive;
+driveBtn.onclick = () => startDrive();
 document.getElementById('hExit').onclick = stopDrive;
+
+// ---------- Curiosity's drive, with stops (Mars) ----------
+// Type "rover" to drive Curiosity from Bradbury Landing along its real route (NASA's MMGIS waypoints). Numbered stops
+// mark its big findings: arrive at one (or click it on the map) and a card tells the story, with the photos the rover
+// took there. Each photo has a view cone from where the rover stood: Navcam, Hazcam and ChemCam images carry the
+// camera's pointing and the rover's attitude, so the direction, tilt and width are the real ones (Mastcam's colour
+// images don't, so they're not here). Built by tools/build_msl_stops.py into msl-stops.json.
+const MSL = { stops: null, route: null, open: -1 };
+const MSL_CAM = { n: ['Navcam', '#7fd1ff', 2.0, 'NASA/JPL-Caltech'], f: ['Front Hazcam', '#b4f08c', 0.7, 'NASA/JPL-Caltech'], r: ['Rear Hazcam', '#f0d58c', 0.7, 'NASA/JPL-Caltech'],
+  c: ['ChemCam telescope', '#ff9ecb', 2.0, 'NASA/JPL-Caltech/LANL'] };
+const mDist = (a, b) => Math.hypot((b[0] - a[0]) * Math.cos(a[1] * D2R), b[1] - a[1]) * D2R * R_BODY * 1000;
+const fmtM = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km';
+async function loadMsl() {
+  if (!MARS) return false;
+  if (MSL.stops) return true;
+  if (!MSL.p) MSL.p = fetch(new URL('msl-stops.json', location.href).href).then(r => r.json()).catch(() => null);
+  const d = await MSL.p; if (!d) { MSL.p = null; return false; }
+  if (MSL.stops) return true;
+  MSL.stops = d.stops; MSL.route = d.route;
+  map.addSource('msl-stops', { type: 'geojson', data: { type: 'FeatureCollection', features: MSL.stops.map((s, i) => ({ type: 'Feature', properties: { i, t: s.t }, geometry: { type: 'Point', coordinates: [s.lon, s.lat] } })) } });
+  map.addLayer({ id: 'msl-stop-next', type: 'circle', source: 'msl-stops', minzoom: 9, filter: ['==', ['get', 'i'], -1],
+    paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#4fd1ff', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'map' } });
+  map.addLayer({ id: 'msl-stop', type: 'circle', source: 'msl-stops', minzoom: 9,
+    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 15, 8], 'circle-color': '#4fd1ff', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+  map.on('click', 'msl-stop', e => { const f = e.features && e.features[0]; if (f && !BG.on) { openStop(f.properties.i); map.flyTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 17), duration: 1200 }); } });
+  map.on('mouseenter', 'msl-stop', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'msl-stop', () => map.getCanvas().style.cursor = '');
+  return true;
+}
+const stopCard = document.getElementById('stopCard');
+function openStop(i) {
+  const s = MSL.stops && MSL.stops[i]; if (!s) return;
+  MSL.open = i;
+  phEl.classList.remove('on'); PH.open = false;          // one set of photos on the map at a time
+  PH.items = s.ph.map(([cam, sol, u, az, el, hf, lon, lat, id]) => {
+    const C = MSL_CAM[cam], L = el < -1.5 ? Math.max(2, Math.min(80, C[2] / Math.tan(-el * D2R))) : 80;
+    const g = { az, el, hfov: hf, L };
+    return { c: C[1], lon, lat, src: u, thumb: u, g: { ...g, hfov: Math.max(hf, 1.5) },
+      cap: `${C[0]} · sol ${sol} · ${lookTxt(g)} · <a href="https://mars.nasa.gov/raw_images/${id}" target="_blank" rel="noopener">NASA page</a> · ${C[3]}` };
+  });
+  const used = [...new Set(s.ph.map(p => p[0]))];
+  stopCard.innerHTML = `<h3><span class="sc-n">${i + 1}</span>${s.t}<button type="button" title="Close" aria-label="Close">&#10005;</button></h3>
+    <div class="sc-sub">Sol ${s.sol} · ${s.date} · ${s.km.toLocaleString('en', { maximumFractionDigits: 1 })} km from the landing site</div>
+    <p>${s.text}</p>${s.link ? `<a href="${s.link}" target="_blank" rel="noopener">Read more</a>` : ''}
+    <div class="sc-ph">${PH.items.length} photos Curiosity took here. Hover one to see where it looked on the map, click to enlarge. ${used.map(c => `<span style="color:${MSL_CAM[c][1]}">&#9632;</span> ${MSL_CAM[c][0]}`).join(' ')}</div>
+    <div id="scThumbs"></div>`;
+  stopCard.querySelector('h3 button').onclick = closeStop;
+  const box = stopCard.querySelector('#scThumbs');
+  PH.items.forEach((it, k) => {
+    const t = document.createElement('img'); t.src = it.thumb; t.loading = 'lazy'; t.dataset.i = k; t.alt = '';
+    t.style.borderColor = it.c; t.onmouseenter = () => phHighlight(k); t.onclick = () => phOpen(k);
+    box.appendChild(t);
+  });
+  stopCard.classList.add('on'); stopCard.scrollTop = 0;
+  drawCones();
+}
+function closeStop() {
+  stopCard.classList.remove('on'); MSL.open = -1; PH.items = [];
+  if (map.getSource('ph-cones')) map.getSource('ph-cones').setData({ type: 'FeatureCollection', features: [] });
+}
+// called from the drive HUD a few times a second: arriving at stops, and where the next one is
+function roverStops(ll) {
+  if (!MSL.stops) return;
+  const p = [wrapLon(ll.lng), ll.lat], arr = 25 + 2 * BG.S;
+  let best = -1, bd = Infinity;
+  MSL.stops.forEach((s, i) => { const d = mDist(p, [s.lon, s.lat]); if (d < bd) { bd = d; best = i; } });
+  if (bd < arr && MSL.open !== best) { BG.lastStop = best; openStop(best); }
+  const n = MSL.stops.length, nx = Math.min((BG.lastStop ?? 0) + 1, n - 1), s = MSL.stops[nx];
+  if (map.getLayer('msl-stop-next')) map.setFilter('msl-stop-next', ['==', ['get', 'i'], BG.lastStop === n - 1 ? -1 : nx]);
+  const el = document.getElementById('hNext');
+  if (BG.lastStop === n - 1) { el.innerHTML = 'You made it to where Curiosity is today!'; return; }
+  const d = mDist(p, [s.lon, s.lat]), rot = bearingDeg(p, [s.lon, s.lat]) - map.getBearing();
+  if (!el.querySelector('#hArrow')) el.innerHTML = 'Next: <b id="hNt"></b> · <span id="hNd"></span> <span id="hArrow">&#11014;</span>';
+  document.getElementById('hNt').textContent = `${nx + 1} · ${s.t}`;
+  document.getElementById('hNd').textContent = fmtM(d);
+  document.getElementById('hArrow').style.transform = `rotate(${rot}deg)`;
+}
+// jump to a stop (N / B, or the buttons), facing the one after it
+function goStop(i) {
+  const st = MSL.stops, s = st && st[i]; if (!s || !BG.on) return;
+  const mc = maplibregl.MercatorCoordinate.fromLngLat([s.lon, s.lat]), nx = st[Math.min(i + 1, st.length - 1)];
+  const h = i < st.length - 1 ? bearingDeg([s.lon, s.lat], [nx.lon, nx.lat]) : BG.heading;
+  Object.assign(BG, { mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, v: 0, heading: h, camBearing: h, lastStop: i, tll: null });
+  BG.trail.push([]);
+  openStop(i);
+}
+document.getElementById('hNextB').onclick = e => { e.currentTarget.blur(); if (MSL.stops) goStop(Math.min(MSL.stops.length - 1, (BG.lastStop ?? 0) + 1)); };
+document.getElementById('hPrev').onclick = e => { e.currentTarget.blur(); if (MSL.stops) goStop(Math.max(0, (BG.lastStop ?? 0) - 1)); };
+if (MARS) map.on('zoomend', () => { if (map.getZoom() >= 9.5) loadMsl(); });
 
 // ---------- fighter jet ----------
 // A generic twin-tail fighter (about 19 m long), drawn at true size in its own three.js custom layer.
@@ -2782,14 +2937,15 @@ function cheat(w) {
     showToast(w === 'red' ? 'Close-up images (CTX, THEMIS, HiRISE) coloured from Viking' : 'Close-up images back to their original grey');
     return;
   }
-  const go = w === 'drive' ? startDrive : w === 'fly' ? startFly : null;
+  const go = w === 'drive' ? () => startDrive() : w === 'rover' ? () => startDrive('msl') : w === 'fly' ? startFly : null;
   if (!go) return;
   q.value = ''; sugg.style.display = 'none'; q.blur();
+  if (w === 'rover' && !MARS) { showToast('Curiosity drives on Mars: switch to the Mars map and type "rover" there'); return; }
   if (!HAS_TERRAIN && w === 'drive') { showToast('There is no ground to drive on here'); return; }
   go();
   return true;
 }
-const CHEATS = ['drive', 'fly', 'red', 'grey', 'gray'];
+const CHEATS = ['drive', 'rover', 'fly', 'red', 'grey', 'gray'];
 const placeStartsWith = w => (typeof matches !== 'undefined' ? matches : []).some(c => c.name.toLowerCase() !== w && c.name.toLowerCase().startsWith(w));
 q.addEventListener('input', () => {
   const w = q.value.trim().toLowerCase();

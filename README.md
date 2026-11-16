@@ -127,3 +127,16 @@ HiRISE, CTX and HRSC stereo DEMs tied to MOLA). The 1 m DEM was read for the are
 9 × 19 km) and cut into 512-px Web Mercator tiles, zoom 10–15 (~1.3 m per pixel), by `tools/build_gale_dem.py`:
 `.dem` files: gzipped little-endian int16, delta-coded (each value from its left neighbour, a row's first from the row above), height = value / 10 − 5000 m, 0 = no data. (Not an image format: browsers' colour management altered the values and made spikes.) Inside that area these heights replace the
 200 m global DEM, blended over the last 300 m.
+
+## Drive Curiosity (Mars)
+
+Type `rover` in the "Add a country…" box to drive NASA's Curiosity rover from Bradbury Landing along its real route
+through Gale crater (on the 1 m 3D terrain). Its speed goes from the real 4 cm/s up to 1500×, and it can turn on the
+spot. Sixteen numbered stops mark the big findings, from the first streambed pebbles to the sulfur crystals, the
+boxwork and where the rover is today. Drive up to a stop (or press N to jump there) and a card tells the story,
+with the photos Curiosity took there. Each photo has a view cone on the map showing where it looked: the Navcam,
+Hazcam and ChemCam images in NASA's raw-image archive carry the camera's pointing and the rover's attitude, so the
+direction, tilt and width are the real ones.
+
+`msl-stops.json` is built by `tools/build_msl_stops.py` from NASA's MMGIS waypoints for Curiosity (sol, site,
+drive, position) and the raw-image API (photos with camera vectors, attitude quaternions and CAHV camera models).
