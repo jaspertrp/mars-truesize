@@ -36,6 +36,7 @@
     radial-gradient(1px 1px at 8% 90%,#fff7,transparent 60%),radial-gradient(1.2px 1.2px at 47% 8%,#fff9,transparent 60%),
     radial-gradient(ellipse at 50% 50%,#1a0f12 0%,#07050a 70%)}
   #map{position:absolute;inset:0}
+  body.driving.mars #map{background:#e3c4a0}   /* the canvas is see-through in a thin strip at the horizon when tilted far: show haze, not the dark page */
   .maplibregl-map{font-family:inherit}
   .panel{position:absolute;z-index:10;top:14px;left:14px;width:320px;max-height:calc(100% - 28px);display:flex;flex-direction:column;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);backdrop-filter:blur(8px);overflow:hidden}
