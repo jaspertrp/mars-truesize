@@ -125,7 +125,8 @@
   #photos .ph-strip img.hi,#photos .ph-strip img:hover{opacity:1;outline:2px solid #fff}
   #phBox{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:zoom-out}
   #phBox.on{display:flex}
-  #phBox img{max-width:94vw;max-height:84vh;border-radius:6px}
+  #phBox img{height:84vh;width:auto;max-width:94vw;object-fit:contain;border-radius:6px}
+  .tint{filter:sepia(1) saturate(1.7) hue-rotate(-14deg) brightness(.96) contrast(1.05)}
   #phCap{color:#ddd;font-size:12px;text-align:center}
   #phCap a{color:var(--accent)}
   #stopCard{position:fixed;left:14px;top:14px;width:min(360px,calc(100vw - 28px));max-height:calc(100vh - 190px);overflow:auto;background:rgba(20,14,12,.93);border:1px solid var(--line);border-radius:12px;padding:12px 14px;z-index:30;display:none;color:var(--text);font-size:13px;line-height:1.45;backdrop-filter:blur(6px);box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -140,6 +141,9 @@
   #scThumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px}
   #scThumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:2px solid transparent;cursor:pointer;opacity:.85;background:#2a1d18}
   #scThumbs img.hi,#scThumbs img:hover{opacity:1;outline:2px solid #fff}
+  #stopCard .sc-tools{display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:11.5px;color:var(--muted)}
+  #stopCard .sc-tools label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text)}
+  #stopCard .sc-sec{color:var(--muted);font-size:11px;margin:8px 0 4px}
   .hud #hStopRow{display:none;margin-top:8px;gap:10px;align-items:center;justify-content:center;border-top:1px solid var(--line);padding-top:8px}
   body.rover .hud #hStopRow{display:flex}
   .hud #hNext{min-width:300px;text-align:center} .hud #hNext b{color:#4fd1ff}
@@ -1887,20 +1891,21 @@ function phHighlight(i) { if (map.getLayer('ph-cone-hi')) map.setFilter('ph-cone
 const lookTxt = g => `looking ${Math.round((g.az + 360) % 360)}° (${g.el >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(g.el))}°), ${g.hfov < 3 ? g.hfov.toFixed(1) : Math.round(g.hfov)}° wide`;
 function phOpen(i) {
   const it = PH.items[i]; if (!it) return;
-  document.getElementById('phBig').src = it.src;
-  document.getElementById('phCap').innerHTML = it.cap;
+  const big = document.getElementById('phBig');
+  big.src = it.src; big.classList.toggle('tint', !!(it.bw && MSL.colour && MSL.open >= 0));
+  document.getElementById('phCap').innerHTML = it.cap + (it.bw && MSL.colour && MSL.open >= 0 ? ' · <i>black-and-white camera, tinted to Mars colours</i>' : '');
   phBox.classList.add('on'); phHighlight(i);
 }
 // the view cones of the photos in PH.items, each from where its rover stood
 function drawCones(fit) {
-  const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => ({ type: 'Feature',
-    properties: { i, c: it.c }, geometry: { type: 'Polygon', coordinates: [conePoly(it.lon, it.lat, it.g)] } })) };
+  const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => it.g && !it.small ? ({ type: 'Feature',
+    properties: { i, c: it.c }, geometry: { type: 'Polygon', coordinates: [conePoly(it.lon, it.lat, it.g)] } }) : null).filter(Boolean) };
   if (!map.getSource('ph-cones')) {
     map.addSource('ph-cones', { type: 'geojson', data: fc });
     map.addLayer({ id: 'ph-cone', type: 'fill', source: 'ph-cones', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.08 } });
     map.addLayer({ id: 'ph-cone-line', type: 'line', source: 'ph-cones', paint: { 'line-color': ['get', 'c'], 'line-opacity': 0.35, 'line-width': 0.8 } });
     map.addLayer({ id: 'ph-cone-hi', type: 'fill', source: 'ph-cones', filter: ['==', ['get', 'i'], -1], paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.55 } });
-    map.on('click', 'ph-cone', e => { const f = e.features && e.features[e.features.length - 1]; if (f) phOpen(f.properties.i); });
+    map.on('click', 'ph-cone', e => { if (MSL.open >= 0) return; const f = e.features && e.features[e.features.length - 1]; if (f) phOpen(f.properties.i); });
   } else map.getSource('ph-cones').setData(fc);
 }
 async function showPhotos(sol, lon, lat) {
@@ -2920,9 +2925,10 @@ document.getElementById('hExit').onclick = stopDrive;
 // took there. Each photo has a view cone from where the rover stood: Navcam, Hazcam and ChemCam images carry the
 // camera's pointing and the rover's attitude, so the direction, tilt and width are the real ones (Mastcam's colour
 // images don't, so they're not here). Built by tools/build_msl_stops.py into msl-stops.json.
-const MSL = { stops: null, route: null, open: -1 };
+const MSL = { stops: null, route: null, open: -1, colour: true };
+try { MSL.colour = localStorage.getItem('msl-colour') !== '0'; } catch (e) {}
 const MSL_CAM = { n: ['Navcam', '#7fd1ff', 2.0, 'NASA/JPL-Caltech'], f: ['Front Hazcam', '#b4f08c', 0.7, 'NASA/JPL-Caltech'], r: ['Rear Hazcam', '#f0d58c', 0.7, 'NASA/JPL-Caltech'],
-  c: ['ChemCam telescope', '#ff9ecb', 2.0, 'NASA/JPL-Caltech/LANL'] };
+  c: ['ChemCam telescope', '#ff9ecb', 2.0, 'NASA/JPL-Caltech/LANL'], m: ['Mastcam (colour)', '#ff8a3d', 2.0, 'NASA/JPL-Caltech/MSSS'] };
 const mDist = (a, b) => Math.hypot((b[0] - a[0]) * Math.cos(a[1] * D2R), b[1] - a[1]) * D2R * R_BODY * 1000;
 const fmtM = m => m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km';
 async function loadMsl() {
@@ -2936,7 +2942,10 @@ async function loadMsl() {
   map.addLayer({ id: 'msl-stop-next', type: 'circle', source: 'msl-stops', minzoom: 9, filter: ['==', ['get', 'i'], -1],
     paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#4fd1ff', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'map' } });
   map.addLayer({ id: 'msl-stop', type: 'circle', source: 'msl-stops', minzoom: 9,
-    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 15, 8], 'circle-color': '#4fd1ff', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+    paint: { 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 9, 4, 15, 7, 17, 7.5, 21, 114], 'circle-color': '#4fd1ff', 'circle-opacity': ['interpolate', ['linear'], ['zoom'], 17, 1, 19, 0.6],
+      'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2, 'circle-pitch-alignment': 'map' } });
+  map.addLayer({ id: 'msl-stop-open', type: 'circle', source: 'msl-stops', minzoom: 9, filter: ['==', ['get', 'i'], -1],
+    paint: { 'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 9, 9, 15, 13, 17, 13, 21, 160], 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#ff8a3d', 'circle-stroke-width': 3, 'circle-pitch-alignment': 'map' } });
   map.on('click', 'msl-stop', e => { const f = e.features && e.features[0]; if (f && BG.on) openStop(f.properties.i); if (f && !BG.on) { openStop(f.properties.i); map.flyTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 17), duration: 1200 }); } });
   map.on('mouseenter', 'msl-stop', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'msl-stop', () => map.getCanvas().style.cursor = '');
@@ -2947,30 +2956,65 @@ function openStop(i) {
   const s = MSL.stops && MSL.stops[i]; if (!s) return;
   MSL.open = i;
   phEl.classList.remove('on'); PH.open = false;          // one set of photos on the map at a time
-  PH.items = s.ph.map(([cam, sol, u, az, el, hf, lon, lat, id]) => {
-    const C = MSL_CAM[cam], L = el < -1.5 ? Math.max(2, Math.min(80, C[2] / Math.tan(-el * D2R))) : 80;
-    const g = { az, el, hfov: hf, L };
-    return { c: C[1], lon, lat, src: u, thumb: u, g: { ...g, hfov: Math.max(hf, 1.5) },
-      cap: `${C[0]} · sol ${sol} · ${lookTxt(g)} · <a href="https://mars.nasa.gov/raw_images/${id}" target="_blank" rel="noopener">NASA page</a> · ${C[3]}` };
+  if (map.getLayer('msl-stop-open')) map.setFilter('msl-stop-open', ['==', ['get', 'i'], i]);
+  // Navcam / Hazcam / ChemCam frames (black and white, with pointing) and, with colour on, Mastcam colour frames
+  // (NASA's feed has no pointing for those, so they get no cone)
+  const rows = s.ph.filter(p => p[0] !== 'm' || MSL.colour);
+  rows.sort((a, b) => (a[0] === 'm' ? 0 : 1) - (b[0] === 'm' ? 0 : 1));
+  PH.items = rows.map(([cam, sol, u, az, el, hf, lon, lat, id]) => {
+    const C = MSL_CAM[cam], link = `<a href="https://mars.nasa.gov/raw_images/${id}" target="_blank" rel="noopener">NASA page</a> · ${C[3]}`;
+    if (cam === 'm') return { c: C[1], lon, lat, src: u, thumb: u, g: null, bw: false, cap: `${C[0]} · sol ${sol} · NASA doesn't publish where this camera was pointing, so it has no cone on the map · ${link}` };
+    const L = el < -1.5 ? Math.max(2, Math.min(80, C[2] / Math.tan(-el * D2R))) : 80, g = { az, el, hfov: hf, L };
+    return { c: C[1], lon, lat, src: u, thumb: u, bw: true, g: { ...g, hfov: Math.max(hf, 1.5) }, cap: `${C[0]} · sol ${sol} · ${lookTxt(g)} · ${link}` };
   });
-  const used = [...new Set(s.ph.map(p => p[0]))];
+  const used = [...new Set(rows.map(p => p[0]))];
   stopCard.innerHTML = `<h3><span class="sc-n">${i + 1}</span>${s.t}<button type="button" title="Close" aria-label="Close">&#10005;</button></h3>
     <div class="sc-sub">Sol ${s.sol} · ${s.date} · ${s.km.toLocaleString('en', { maximumFractionDigits: 1 })} km from the landing site</div>
     <p>${s.text}</p>${s.link ? `<a href="${s.link}" target="_blank" rel="noopener">Read more</a>` : ''}
-    <div class="sc-ph">${PH.items.length} photos Curiosity took here. Hover one to see where it looked on the map, click to enlarge. ${used.map(c => `<span style="color:${MSL_CAM[c][1]}">&#9632;</span> ${MSL_CAM[c][0]}`).join(' ')}</div>
+    <div class="sc-tools"><label><input type="checkbox" id="scColour"${MSL.colour ? ' checked' : ''}> Colour</label>
+      <span>Click a photo, a cone, or anywhere around the rover on the map to see the photo looking that way.</span></div>
+    <div class="sc-sec">${used.map(c => `<span style="color:${MSL_CAM[c][1]}">&#9632;</span> ${MSL_CAM[c][0]}`).join(' &nbsp;')}</div>
     <div id="scThumbs"></div>`;
   stopCard.querySelector('h3 button').onclick = closeStop;
+  stopCard.querySelector('#scColour').onchange = e => { MSL.colour = e.target.checked; try { localStorage.setItem('msl-colour', MSL.colour ? '1' : '0'); } catch (x) {} const st = stopCard.scrollTop; openStop(i); stopCard.scrollTop = st; };
   const box = stopCard.querySelector('#scThumbs');
   PH.items.forEach((it, k) => {
     const t = document.createElement('img'); t.src = it.thumb; t.loading = 'lazy'; t.dataset.i = k; t.alt = '';
+    if (it.bw && MSL.colour) t.classList.add('tint');
     t.style.borderColor = it.c; t.onmouseenter = () => phHighlight(k); t.onclick = () => phOpen(k);
+    t.onload = () => { if (t.naturalWidth < 400) { it.small = true; t.remove(); clearTimeout(MSL.redraw); MSL.redraw = setTimeout(drawCones, 300); } };   // skip thumbnails-only frames
     box.appendChild(t);
   });
   stopCard.classList.add('on'); stopCard.scrollTop = 0;
   drawCones();
 }
+// the photo looking towards a clicked point (around the open stop): the cone it's in, or the nearest direction
+function photoToward(lngLat) {
+  const s = MSL.stops && MSL.stops[MSL.open]; if (!s) return -1;
+  const p = [lngLat.lng, lngLat.lat];
+  let best = -1, bs = Infinity;
+  PH.items.forEach((it, k) => {
+    if (!it.g || it.small) return;
+    const d = mDist([it.lon, it.lat], p); if (d > 400) return;
+    const da = Math.abs(wrap180(bearingDeg([it.lon, it.lat], p) - it.g.az)) / (it.g.hfov / 2 + 4);
+    const score = da + (d > it.g.L ? (d - it.g.L) / 60 : 0) + (it.g.hfov < 3 ? 0.4 : 0);   // inside the cone and its reach first
+    if (score < bs) { bs = score; best = k; }
+  });
+  return bs < 3 ? best : -1;
+}
+map.on('click', e => {
+  if (!MSL.stops || MSL.open < 0) return;
+  const f = map.queryRenderedFeatures(e.point, { layers: map.getLayer('msl-stop') ? ['msl-stop'] : [] });
+  if (f.length) return;                                    // a stop dot: its own handler
+  const k = photoToward(e.lngLat); if (k >= 0) phOpen(k);
+});
+map.on('mousemove', e => {
+  if (!MSL.stops || MSL.open < 0 || !PH.items.length) return;
+  const k = photoToward(e.lngLat); if (k !== MSL.hov) { MSL.hov = k; phHighlight(k); map.getCanvas().style.cursor = k >= 0 ? 'pointer' : ''; }
+});
 function closeStop() {
   stopCard.classList.remove('on'); MSL.open = -1; PH.items = [];
+  if (map.getLayer('msl-stop-open')) map.setFilter('msl-stop-open', ['==', ['get', 'i'], -1]);
   if (map.getSource('ph-cones')) map.getSource('ph-cones').setData({ type: 'FeatureCollection', features: [] });
 }
 // called from the drive HUD a few times a second: arriving at stops, and where the next one is
@@ -2979,7 +3023,7 @@ function roverStops(ll) {
   // you're "on" a stop when the rover (its footprint at the size it's drawn) touches the circle: open it once
   // as you drive onto it; it opens again only after you've driven off and come back
   const p = [wrapLon(ll.lng), ll.lat], mpp = 40075016.686 * Math.cos(ll.lat * D2R) / (512 * 2 ** map.getZoom()) / BODY_SCALE;
-  const arr = Math.max(6, BG.V.len * BG.S * 0.6) + 9 * mpp;
+  const arr = Math.max(4, BG.V.len * BG.S * 0.5) + Math.max(8, 9 * mpp);   // the dot is 8 m in radius up close
   let best = -1, bd = Infinity;
   MSL.stops.forEach((s, i) => { const d = mDist(p, [s.lon, s.lat]); if (d < bd) { bd = d; best = i; } });
   if (bd < arr) { if (MSL.inside !== best) { MSL.inside = best; BG.lastStop = best; openStop(best); } }

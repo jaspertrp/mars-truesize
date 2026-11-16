@@ -3,6 +3,7 @@ rover's own Navcam / Hazcam / ChemCam photos taken there, each with where it loo
 Inputs: msl_wp.csv (sol,site,drive,lon,lat,elev,dist) and photos.json (raw-image API items, fetched per stop)."""
 import json, math, re, sys, bisect
 wp_csv, photos_json, stories_json, out = sys.argv[1:5]
+mast_json = sys.argv[5] if len(sys.argv) > 5 else None
 WP = [tuple(float(x) for x in l.split(',')) for l in open(wp_csv) if l.strip()]
 WP.sort(key=lambda w: (w[1], w[2]))
 keys = [(w[1], w[2]) for w in WP]
@@ -33,7 +34,8 @@ def geom(it):
         if f > 20: hfov = 2 * math.degrees(math.atan(w / 2 / f))
     if hfov is None: hfov = {'n': 45, 'f': 124, 'r': 124, 'c': 1.1}[CAM[it['in'][:3]]]
     return az, el, max(0.5, min(130, hfov))
-P = json.load(open(photos_json)); S = json.load(open(stories_json))
+P = json.load(open(photos_json)); S = json.load(open(stories_json)); MA = json.load(open(mast_json)) if mast_json else {}
+if 'coral' in MA: MA['boxwork'] = MA.get('boxwork', []) + MA.pop('coral')
 stops = []
 for s in S:
     w = pos_sol(s['key'])
@@ -41,6 +43,8 @@ for s in S:
     for it in P.get(s['id'], []):
         g = geom(it)
         if not g or g[1] > 50: continue          # sky / sun shots have no place on the map
+        sf = v(it['sf'])
+        if it['st'] != 'full' or (len(sf) == 4 and sf[2] - sf[0] + 1 < 512): continue   # full-size frames only
         site, dr = it['site'], it['dr']
         p = pos_at(site, dr) if site is not None and dr is not None else pos_sol(it['s'])
         if math.hypot((p[3] - w[3]) * 59200, (p[4] - w[4]) * 59200) > 400: continue   # keep photos near the stop
@@ -60,9 +64,17 @@ for s in S:
     nav = [i for i in keep if i['cam'] == 'n']
     step = max(1, len(nav) // 22); pick += nav[::step][:22]
     pick.sort(key=lambda i: (i['sol'], i['az']))
+    # Mastcam colour photos (no pointing in NASA's feed, so no view cone): a spread of frames, left (wide) camera first
+    mast = []
+    if mast_json:
+        ms = sorted(MA.get(s['id'], []), key=lambda m: (m['in'] != 'MAST_LEFT', m['t']))
+        left = [m for m in ms if m['in'] == 'MAST_LEFT'] or ms
+        left.sort(key=lambda m: m['t'])
+        step = max(1, len(left) // 14)
+        mast = [['m', m['s'], m['u'].replace('http://', 'https://'), None, None, None, w[3], w[4], m['id']] for m in left[::step][:14]]
     stops.append(dict(id=s['id'], t=s['t'], sol=s['key'], date=s['date'], text=s['text'], link=s.get('link'),
                       lon=round(w[3], 6), lat=round(w[4], 6), km=round(w[6] / 1000, 2),
-                      ph=[[i['cam'], i['sol'], i['u'], round(i['az'], 1), round(i['el'], 1), round(i['hf'], 2), round(i['lon'], 6), round(i['lat'], 6), i['id']] for i in pick]))
+                      ph=[[i['cam'], i['sol'], i['u'], round(i['az'], 1), round(i['el'], 1), round(i['hf'], 2), round(i['lon'], 6), round(i['lat'], 6), i['id']] for i in pick] + mast))
     print(s['id'], len(P.get(s['id'], [])), len(keep), len(pick), file=sys.stderr)
 route = [[round(w[3], 6), round(w[4], 6), int(w[0])] for w in sorted(WP, key=lambda w: (w[0], w[1], w[2]))]
 json.dump(dict(route=route, stops=stops), open(out, 'w'), separators=(',', ':'))
