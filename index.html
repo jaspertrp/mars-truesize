@@ -1950,26 +1950,40 @@ let showHirise = !(saved && saved.hirise === false);
 const tHirise = document.getElementById('tHirise');
 if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
-// Curiosity's colour map of Gale crater: the HiRISE colour (LRGB) mosaic from NASA's "Where is Curiosity?" map,
-// mirrored here as WebP tiles (msl-color/, zoom 10-17, about 0.65 m per pixel) because NASA's tile server doesn't
-// allow other websites to load it. It sits on top of the HiRISE detail layer and switches with it.
-const MSL_COLOR_BOUNDS = [137.32672354505786, -4.87560429259321, 137.4785574965306, -4.55506331169111];
+// Colour maps of the rover sites from NASA's "Where is the rover?" maps (MMGIS), mirrored here as WebP tiles because
+// NASA's tile server doesn't allow other websites to load them. They sit on top of the HiRISE detail layer and switch
+// with it.
+//  - Gale crater (Curiosity): HiRISE colour (LRGB) mosaic, zoom 10-17 (~0.65 m per pixel), msl-color/.
+//  - Jezero crater (Perseverance): HiRISE colour + CTX mosaic (25 cm native), zoom 10-16 everywhere and 17-18
+//    (~0.3 m per pixel) in a corridor a few hundred metres either side of Perseverance's and Ingenuity's paths, m20-color/.
+//    The sharp corridor is a second layer on top: MapLibre doesn't fall back to a coarser tile where one is missing.
+const COLOR_MAPS = [
+  { id: 'mslcolor', dir: 'msl-color', bounds: [137.32672354505786, -4.87560429259321, 137.4785574965306, -4.55506331169111],
+    zooms: [[10, 17]], credit: 'Gale colour mosaic: NASA/JPL-Caltech/University of Arizona (HiRISE)' },
+  { id: 'm20color', dir: 'm20-color', bounds: [77.15751489, 18.23712426, 77.51146566, 18.52055001],
+    zooms: [[10, 16], [17, 18]], credit: 'Jezero colour mosaic: NASA/JPL-Caltech/University of Arizona/MSSS (HiRISE, CTX)' }
+];
+const COLOR_LAYERS = [];
 if (MARS) map.on('load', () => {
-  if (map.getSource('msl-color')) return;
-  map.addSource('msl-color', { type: 'raster', tiles: [new URL('msl-color/', location.href).href + '{z}/{x}/{y}.webp'], tileSize: 256,
-    minzoom: 10, maxzoom: 17, bounds: MSL_COLOR_BOUNDS });
-  map.addLayer({ id: 'ov-mslcolor', type: 'raster', source: 'msl-color', minzoom: 10,
-    layout: { visibility: showHirise ? 'visible' : 'none' },
-    paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 1], 'raster-fade-duration': 200 } }, map.getLayer('grid') ? 'grid' : undefined);
+  for (const cm of COLOR_MAPS) cm.zooms.forEach(([z0, z1], k) => {
+    const id = 'ov-' + cm.id + k;
+    if (map.getSource(id)) return;
+    map.addSource(id, { type: 'raster', tiles: [new URL(cm.dir + '/', location.href).href + '{z}/{x}/{y}.webp'], tileSize: 256,
+      minzoom: z0, maxzoom: z1, bounds: cm.bounds });
+    map.addLayer({ id, type: 'raster', source: id, minzoom: k ? z0 : 10,
+      layout: { visibility: showHirise ? 'visible' : 'none' },
+      paint: { 'raster-opacity': k ? 1 : ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 1], 'raster-fade-duration': 200 } }, map.getLayer('grid') ? 'grid' : undefined);
+    COLOR_LAYERS.push(id);
+  });
 });
 function applyHirise() {
-  for (const id of ['ov-hirise', 'ov-mslcolor']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showHirise ? 'visible' : 'none');
+  for (const id of ['ov-hirise', ...COLOR_LAYERS]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showHirise ? 'visible' : 'none');
   updateCredit();
 }
 tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
   let extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
-  if (MARS && showHirise && map.getZoom() >= 10) { const c = map.getCenter(); if (c.lng > 136.9 && c.lng < 137.9 && c.lat > -5.3 && c.lat < -4.1) extra += ' · Gale colour mosaic: NASA/JPL-Caltech/University of Arizona (HiRISE), via NASA MMGIS'; }
+  if (MARS && showHirise && map.getZoom() >= 10) { const c = map.getCenter(); for (const cm of COLOR_MAPS) { const b = cm.bounds; if (c.lng > b[0] - 0.3 && c.lng < b[2] + 0.3 && c.lat > b[1] - 0.3 && c.lat < b[3] + 0.3) extra += ' · ' + cm.credit + ', via NASA MMGIS'; } }
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
   document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + under + extra;
 }

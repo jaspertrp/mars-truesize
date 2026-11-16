@@ -112,3 +112,10 @@ GeoJSON behind NASA's "Where is the rover?" maps (MMGIS: `M20_traverse.json`, `M
 map (MMGIS layer `MSL_Gale_HiRISE-LRGB_78quads`, NASA/JPL-Caltech/University of Arizona). NASA's tile server does not
 allow other websites to load its tiles, so zoom levels 10–17 (about 0.65 m per pixel) are mirrored here as WebP,
 in the usual XYZ web-mercator layout. Shown with the "HiRISE detail" switch.
+
+## Jezero crater in colour (Mars)
+
+`m20-color/`: the HiRISE colour + CTX mosaic of Jezero crater from NASA's "Where is Perseverance?" map (MMGIS layer
+`M20_HiRISE_RGB_CTX_mosaic_25cm_v7_Merge_LERC_clip`, NASA/JPL-Caltech/University of Arizona/MSSS), mirrored as WebP:
+zoom 10–16 over the whole mosaic, plus zoom 17–18 (about 0.3 m per pixel) in a corridor of a few hundred metres around
+Perseverance's and Ingenuity's paths.
