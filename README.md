@@ -132,7 +132,7 @@ HiRISE, CTX and HRSC stereo DEMs tied to MOLA). The 1 m DEM was read for the are
 
 Type `rover` in the "Add a country…" box to drive NASA's Curiosity rover from Bradbury Landing along its real route
 through Gale crater (on the 1 m 3D terrain). Its speed goes from the real 4 cm/s up to 1500×, and it can turn on the
-spot. Sixteen numbered stops mark the big findings, from the first streambed pebbles to the sulfur crystals, the
+spot. Twenty-four numbered stops mark the big findings, from the first streambed pebbles to the sulfur crystals, the
 boxwork and where the rover is today. Drive up to a stop (or press N to jump there) and a card tells the story,
 with the photos Curiosity took there. Each photo has a view cone on the map showing where it looked: the Navcam,
 Hazcam and ChemCam images in NASA's raw-image archive carry the camera's pointing and the rover's attitude, so the

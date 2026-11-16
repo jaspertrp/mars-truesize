@@ -1997,13 +1997,107 @@ const ROVERS = [
   { n: 'Sojourner', k: 'soj', lon: -33.2200, lat: 19.1300, h: 120 },
   { n: 'Zhurong', k: 'zhu', lon: 109.9440, lat: 25.0480, h: 180 }
 ];
+// Curiosity, to scale from its published dimensions (about 3 m long, 2.7 m wide, 2.2 m to the top of the mast;
+// 50 cm wheels, 40 cm wide, with cleats; 60 cm ground clearance), with the rocker-bogie suspension, steerable
+// corner wheels, the remote sensing mast (ChemCam on top, Mastcam and Navcam below), the high-gain dish, the RTG
+// power source with its fins at the back, and the arm stowed across the front. x = right, y = forward, z = up.
+const MSL_WHEELS = { x: 1.1, front: 1.1, mid: 0.0, rear: -1.05, r: 0.25, w: 0.4 };
+function buildCuriosity(T, tint = 0xd9d2c4) {
+  const g = new T.Group(), wheels = [];
+  const M = (c, o = {}) => new T.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.2, ...o });
+  const body = M(tint), deck = M(0xc9c2b4), dark = M(0x2a2a2c, { roughness: 0.5 }), grey = M(0x8e8e90, { metalness: 0.5, roughness: 0.4 }),
+    alu = M(0xb9b6ae, { metalness: 0.75, roughness: 0.35 }), gold = M(0xc9a04a, { metalness: 0.8, roughness: 0.3 }),
+    black = M(0x141414, { roughness: 0.3 }), glass = M(0x1b2633, { metalness: 0.6, roughness: 0.15 });
+  const add = (o, p = g) => { p.add(o); return o; };
+  const box = (w, l, h, m, x, y, z, p) => { const o = add(new T.Mesh(new T.BoxGeometry(w, l, h), m), p); o.position.set(x, y, z); return o; };
+  const cyl = (r1, r2, h, m, seg = 20) => new T.Mesh(new T.CylinderGeometry(r1, r2, h, seg), m);   // along y
+  const tube = (a, b, r, m, p) => {                       // a thin strut from point a to point b
+    const A = new T.Vector3(...a), B = new T.Vector3(...b), d = B.clone().sub(A), o = cyl(r, r, d.length(), m, 8);
+    o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize()); return add(o, p);
+  };
+  // --- wheels: aluminium drum with cleats and curved titanium spokes, on steering struts at the corners ---
+  const W = MSL_WHEELS, drum = new T.CylinderGeometry(W.r * 0.94, W.r * 0.94, W.w, 28, 1, true); drum.rotateZ(Math.PI / 2);
+  const rim = new T.TorusGeometry(W.r * 0.92, 0.012, 6, 28); rim.rotateY(Math.PI / 2);
+  const cleat = new T.BoxGeometry(W.w * 0.98, 0.022, 0.014), spoke = new T.TorusGeometry(W.r * 0.45, 0.009, 4, 10, Math.PI * 0.55); spoke.rotateY(Math.PI / 2);
+  for (const sx of [-1, 1]) for (const [pos, y] of [['front', W.front], ['mid', W.mid], ['rear', W.rear]]) {
+    const pivot = add(new T.Group()); pivot.position.set(sx * W.x, y, W.r);
+    const spin = new T.Group(); pivot.add(spin);
+    spin.add(new T.Mesh(drum, alu));
+    for (const e of [-1, 1]) { const rm = new T.Mesh(rim, grey); rm.position.x = e * W.w / 2; spin.add(rm); }
+    for (let i = 0; i < 24; i++) {                          // the cleats, alternating slightly like the real chevrons
+      const a = i / 24 * Math.PI * 2, c = new T.Mesh(cleat, grey);
+      c.position.set(0, Math.sin(a) * W.r * 0.955, Math.cos(a) * W.r * 0.955); c.rotation.x = -a; c.rotation.z = (i % 2 ? 0.12 : -0.12); spin.add(c);
+    }
+    for (let i = 0; i < 6; i++) { const sp = new T.Mesh(spoke, grey); sp.rotation.x = i / 6 * Math.PI * 2; sp.position.x = sx * W.w * 0.3; spin.add(sp); }
+    const hub = cyl(0.07, 0.07, W.w * 0.7, dark); hub.rotation.z = Math.PI / 2; spin.add(hub);
+    if (pos !== 'mid') {                                     // steering actuator and strut up to the suspension
+      const st = cyl(0.04, 0.04, 0.42, dark, 10); st.rotation.x = Math.PI / 2; st.position.set(-sx * 0.05, 0, 0.36); pivot.add(st);
+      const act = cyl(0.075, 0.075, 0.12, grey, 14); act.rotation.x = Math.PI / 2; act.position.set(-sx * 0.05, 0, 0.6); pivot.add(act);
+    }
+    wheels.push({ pivot, spin, front: pos === 'front', mid: pos === 'mid' });
+  }
+  // --- rocker-bogie suspension (both sides) ---
+  for (const sx of [-1, 1]) {
+    const x = sx * 1.04, pvt = [sx * 0.86, 0.25, 0.92], bog = [x, -0.5, 0.62];
+    tube(pvt, [x, 0.55, 0.98], 0.04, alu); tube([x, 0.55, 0.98], [x, W.front, 0.92], 0.04, alu);      // rocker, front leg
+    tube(pvt, bog, 0.04, alu);                                                                       // rocker, rear leg
+    tube(bog, [x, W.mid, 0.52], 0.035, alu); tube([x, W.mid, 0.52], [x, W.mid, W.r], 0.03, alu);    // bogie to the middle wheel
+    tube(bog, [x, W.rear, 0.86], 0.035, alu);                                                      // bogie to the rear wheel
+    const pv = cyl(0.07, 0.07, 0.12, grey, 14); pv.rotation.z = Math.PI / 2; pv.position.set(...pvt); add(pv);
+    const bv = cyl(0.06, 0.06, 0.1, grey, 14); bv.rotation.z = Math.PI / 2; bv.position.set(...bog); add(bv);
+  }
+  const diff = cyl(0.03, 0.03, 1.5, dark, 8); diff.rotation.z = Math.PI / 2; diff.position.set(0, -0.15, 1.12); add(diff);   // differential bar over the deck
+  // --- warm electronics box and deck ---
+  box(1.55, 1.85, 0.45, body, 0, 0.1, 0.84);
+  box(1.75, 2.0, 0.05, deck, 0, 0.1, 1.08);
+  box(1.5, 0.05, 0.3, M(0xb8b0a0), 0, 1.03, 0.82);                                    // front panel
+  for (const sx of [-1, 1]) {                                                          // hazcam pairs, front and back
+    box(0.06, 0.04, 0.06, black, sx * 0.32, 1.06, 0.68); box(0.06, 0.04, 0.06, black, sx * 0.18, 1.06, 0.68);
+    box(0.06, 0.04, 0.06, black, sx * 0.25, -0.84, 0.7);
+  }
+  box(0.5, 0.35, 0.16, gold, -0.25, 0.25, 1.18);                                      // SAM / CheMin inlets area (gold foil)
+  box(0.3, 0.3, 0.1, M(0xeeeeee), 0.35, -0.2, 1.15);
+  // --- RTG at the back, tilted, with its cooling fins ---
+  const rtg = add(new T.Group()); rtg.position.set(0, -1.12, 1.05); rtg.rotation.x = -0.55;
+  const core = cyl(0.2, 0.2, 0.66, black, 20); rtg.add(core);
+  for (let i = 0; i < 8; i++) { const f = new T.Mesh(new T.BoxGeometry(0.02, 0.62, 0.22), dark); const a = i / 8 * Math.PI * 2; f.position.set(Math.cos(a) * 0.29, 0, Math.sin(a) * 0.29); f.rotation.y = -a; rtg.add(f); }
+  box(0.9, 0.35, 0.05, dark, 0, -0.95, 1.0);                                          // RTG mount / heat exchanger plate
+  // --- high-gain antenna (hexagonal dish on a gimbal) and UHF antenna ---
+  const hga = add(new T.Group()); hga.position.set(-0.5, -0.45, 1.32);
+  const hgm = cyl(0.035, 0.035, 0.22, grey, 8); hgm.rotation.x = Math.PI / 2; hga.add(hgm);
+  const dish = cyl(0.3, 0.3, 0.035, M(0xe8e4dc), 6); dish.rotation.set(Math.PI / 2 - 0.4, 0, 0.3); dish.position.z = 0.14; hga.add(dish);
+  const uhf = cyl(0.06, 0.08, 0.32, M(0xe8e4dc), 12); uhf.rotation.x = Math.PI / 2; uhf.position.set(0.55, -0.55, 1.26); add(uhf);
+  const lga = cyl(0.03, 0.03, 0.25, grey, 8); lga.rotation.x = Math.PI / 2; lga.position.set(-0.7, -0.75, 1.22); add(lga);
+  // --- remote sensing mast (front right) with its head ---
+  const mx = 0.55, my = 0.78;
+  const mast = cyl(0.06, 0.07, 0.86, M(0xe2ddd2), 14); mast.rotation.x = Math.PI / 2; mast.position.set(mx, my, 1.52); add(mast);
+  const head = add(new T.Group()); head.position.set(mx, my, 1.98);
+  head.add(new T.Mesh(new T.BoxGeometry(0.42, 0.24, 0.2), M(0xe2ddd2)));
+  const cc = new T.Mesh(new T.BoxGeometry(0.26, 0.34, 0.16), M(0xd8d0c0)); cc.position.set(0, -0.02, 0.18); head.add(cc);   // ChemCam
+  const lens = cyl(0.055, 0.055, 0.04, glass, 18); lens.position.set(0, 0.16, 0.18); head.add(lens);
+  for (const e of [-1, 1]) {
+    const mc = cyl(0.03, 0.03, 0.05, glass, 12); mc.position.set(e * 0.07, 0.135, -0.02); head.add(mc);                 // Mastcam
+    const nc = new T.Mesh(new T.BoxGeometry(0.05, 0.03, 0.05), black); nc.position.set(e * 0.17, 0.125, -0.05); head.add(nc);   // Navcam
+  }
+  // --- arm, stowed across the front, with its turret (drill, brush, MAHLI, APXS) ---
+  tube([0.55, 1.05, 0.95], [0.6, 1.3, 0.95], 0.05, M(0xd0cabe));
+  tube([0.6, 1.3, 0.95], [-0.45, 1.32, 0.98], 0.045, M(0xd0cabe));
+  tube([-0.45, 1.32, 0.98], [-0.35, 1.18, 0.78], 0.04, M(0xd0cabe));
+  const tur = add(new T.Group()); tur.position.set(-0.35, 1.2, 0.72);
+  tur.add(new T.Mesh(new T.BoxGeometry(0.26, 0.26, 0.2), grey));
+  const drill = cyl(0.025, 0.025, 0.22, M(0xcccccc, { metalness: 0.8 }), 8); drill.position.set(0, 0, -0.18); drill.rotation.x = Math.PI / 2; tur.add(drill);
+  const mah = cyl(0.04, 0.04, 0.12, glass, 12); mah.position.set(0.15, 0.05, 0); mah.rotation.z = Math.PI / 2; tur.add(mah);
+  g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  return { g, wheels };
+}
 function buildRover(T, kind, tint) {
   const g = new T.Group(), M = (c, o = {}) => new T.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0.15, ...o });
   const box = (w, l, h, m, x, y, z) => { const o = new T.Mesh(new T.BoxGeometry(w, l, h), m); o.position.set(x, y, z); g.add(o); return o; };
   const cyl = (r, h, m, x, y, z, rx = 0, rz = 0, seg = 16) => { const o = new T.Mesh(new T.CylinderGeometry(r, r, h, seg), m); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); g.add(o); return o; };
   const wheels = (r, w, xs, ys, z) => { const wm = M(0x8c8c8c, { metalness: 0.6 }); for (const x of xs) for (const y of ys) cyl(r, w, wm, x, y, z, 0, Math.PI / 2); };
   // x = right, y = forward, z = up; metres
-  if (kind === 'msl') {                       // Curiosity / Perseverance: 3 m long, 2.2 m tall
+  if (kind === 'msl') return buildCuriosity(T, tint).g;
+  if (kind === 'msl-old') {
     const body = M(tint), dark = M(0x2b2b2b), gold = M(0xc9a24a, { metalness: 0.6 });
     wheels(0.26, 0.4, [-1.15, 1.15], [-1.1, 0.1, 1.15], 0.26);
     box(0.08, 2.4, 0.08, dark, -0.95, 0, 0.6); box(0.08, 2.4, 0.08, dark, 0.95, 0, 0.6);   // rocker-bogie arms
@@ -2460,10 +2554,10 @@ const LRV = { len: 3.1, track: 1.83, base: 2.29, wheelR: 0.405, wheelW: 0.23, vm
 const G_MOON = MOON ? 1.62 : 3.72;   // surface gravity of the world you drive on (Moon or Mars)
 // Curiosity ("rover" in the search box): 3 m long, 2.8 m wide, 50 cm wheels; it tops out at about 4 cm/s.
 // Its speeds don't grow with the size it is drawn at (unlike the buggy), so "Real" really is 4 cm/s.
-const MSLV = { len: 3.0, track: 2.25, base: 2.2, wheelR: 0.25, wheelW: 0.4, vmax: 0.04 };
+const MSLV = { len: 3.0, track: 2.2, base: 2.15, wheelR: 0.25, wheelW: 0.4, vmax: 0.04 };
 const VKIND = {
   buggy: { V: LRV, sizes: [[1, 'Real size'], [10, '10&times;'], [40, '40&times;']], speeds: [[1, 'Speed 1&times;'], [4, '4&times;'], [15, '15&times;'], [50, '50&times;']], S: 10, M: 4, kS: 'moon-buggy-size', kM: 'buggy-speed' },
-  msl: { V: MSLV, sizes: [[5, 'Size 5&times;'], [15, '15&times;'], [40, '40&times;']], speeds: [[1, 'Real speed'], [30, '30&times;'], [300, '300&times;'], [1500, '1500&times;']], S: 15, M: 300, kS: 'rover-size', kM: 'rover-speed' }
+  msl: { V: MSLV, sizes: [[1, 'Real size'], [5, '5&times;'], [15, '15&times;'], [40, '40&times;']], speeds: [[1, 'Real speed'], [30, '30&times;'], [300, '300&times;'], [1500, '1500&times;']], S: 15, M: 300, kS: 'rover-size', kM: 'rover-speed' }
 };
 const BG = { on: false, kind: 'buggy', V: LRV, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
 function loadKind(kind) {
@@ -2532,8 +2626,8 @@ function makeBuggyLayer() {
   scene.add(new T.HemisphereLight(0xffffff, 0x444444, 0.9));
   const sun = new T.DirectionalLight(0xffffff, 2.6); sun.position.set(0.6, 0.35, 0.75); scene.add(sun);
   const bug = buildBuggy(); scene.add(bug.root);
-  const rov = { root: new T.Group(), body: null, wheels: [] }; rov.root.rotation.order = 'ZXY';
-  rov.body = buildRover(T, 'msl', 0xd9c7b0); rov.root.add(rov.body); rov.root.visible = false; scene.add(rov.root);
+  const cm = buildCuriosity(T, 0xd9d2c4), rov = { root: new T.Group(), body: cm.g, wheels: cm.wheels }; rov.root.rotation.order = 'ZXY';
+  rov.root.add(cm.g); rov.root.visible = false; scene.add(rov.root);
   BG.buggyModel = bug; BG.roverModel = rov;
   // dust: no air on the Moon, so every grain flies on a clean parabola and drops straight back down
   const dust = [], dgeo = new T.IcosahedronGeometry(1, 0);
@@ -2682,7 +2776,7 @@ function driveStep(t) {
   const bug = BG.bug;
   bug.root.rotation.set(BG.pitch, -BG.roll, -h);
   bug.root.position.z = 0;
-  for (const w of bug.wheels) { w.pivot.rotation.z = -BG.steer * (w.front ? 1 : -1); w.spin.rotation.x -= (BG.air ? 0 : BG.v) * dt / BG.V.wheelR; }
+  for (const w of bug.wheels) { w.pivot.rotation.z = w.mid ? 0 : -BG.steer * (w.front ? 1 : -1); w.spin.rotation.x -= (BG.air ? 0 : BG.v) * dt / BG.V.wheelR; }
   // dust follows the buggy's frame: shift every grain back by how far the buggy moved
   const sx = (BG.mx - BG.pmx) / mu || 0, sy = -(BG.my - BG.pmy) / mu || 0, sz = BG.z - (BG.pz == null ? BG.z : BG.pz);
   BG.pmx = BG.mx; BG.pmy = BG.my; BG.pz = BG.z;
@@ -2716,7 +2810,7 @@ function driveStep(t) {
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
   const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (R ? vb * 1.5 : BG.V.vmax * S * 6)));   // pull back a bit at speed
   const lenMap = BG.V.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
-  map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(MAXSIMZOOM, Math.max(3, z)) });
+  map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)) });
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
 }
@@ -2799,7 +2893,7 @@ async function startDrive(kind = 'buggy') {
   document.body.classList.add('driving'); document.body.classList.toggle('rover', R);
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
-  if (R) { openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
+  if (R) { MSL.inside = 0; openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
   else if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
   BG.raf = requestAnimationFrame(driveStep);
 }
@@ -2843,7 +2937,7 @@ async function loadMsl() {
     paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#4fd1ff', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'map' } });
   map.addLayer({ id: 'msl-stop', type: 'circle', source: 'msl-stops', minzoom: 9,
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 15, 8], 'circle-color': '#4fd1ff', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
-  map.on('click', 'msl-stop', e => { const f = e.features && e.features[0]; if (f && !BG.on) { openStop(f.properties.i); map.flyTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 17), duration: 1200 }); } });
+  map.on('click', 'msl-stop', e => { const f = e.features && e.features[0]; if (f && BG.on) openStop(f.properties.i); if (f && !BG.on) { openStop(f.properties.i); map.flyTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 17), duration: 1200 }); } });
   map.on('mouseenter', 'msl-stop', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'msl-stop', () => map.getCanvas().style.cursor = '');
   return true;
@@ -2882,10 +2976,14 @@ function closeStop() {
 // called from the drive HUD a few times a second: arriving at stops, and where the next one is
 function roverStops(ll) {
   if (!MSL.stops) return;
-  const p = [wrapLon(ll.lng), ll.lat], arr = 25 + 2 * BG.S;
+  // you're "on" a stop when the rover (its footprint at the size it's drawn) touches the circle: open it once
+  // as you drive onto it; it opens again only after you've driven off and come back
+  const p = [wrapLon(ll.lng), ll.lat], mpp = 40075016.686 * Math.cos(ll.lat * D2R) / (512 * 2 ** map.getZoom()) / BODY_SCALE;
+  const arr = Math.max(6, BG.V.len * BG.S * 0.6) + 9 * mpp;
   let best = -1, bd = Infinity;
   MSL.stops.forEach((s, i) => { const d = mDist(p, [s.lon, s.lat]); if (d < bd) { bd = d; best = i; } });
-  if (bd < arr && MSL.open !== best) { BG.lastStop = best; openStop(best); }
+  if (bd < arr) { if (MSL.inside !== best) { MSL.inside = best; BG.lastStop = best; openStop(best); } }
+  else if (bd > arr * 1.6) MSL.inside = -1;
   const n = MSL.stops.length, nx = Math.min((BG.lastStop ?? 0) + 1, n - 1), s = MSL.stops[nx];
   if (map.getLayer('msl-stop-next')) map.setFilter('msl-stop-next', ['==', ['get', 'i'], BG.lastStop === n - 1 ? -1 : nx]);
   const el = document.getElementById('hNext');
@@ -2902,6 +3000,7 @@ function goStop(i) {
   const mc = maplibregl.MercatorCoordinate.fromLngLat([s.lon, s.lat]), nx = st[Math.min(i + 1, st.length - 1)];
   const h = i < st.length - 1 ? bearingDeg([s.lon, s.lat], [nx.lon, nx.lat]) : BG.heading;
   Object.assign(BG, { mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, v: 0, heading: h, camBearing: h, lastStop: i, tll: null });
+  MSL.inside = i;
   BG.trail.push([]);
   openStop(i);
 }
