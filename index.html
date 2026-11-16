@@ -3084,7 +3084,9 @@ function openStop(i, keepScroll) {
   PH.items = rows.map(([cam, sol, u, az, el, hf, lon, lat, id]) => {
     const C = MSL_CAM[cam], link = `<a href="https://mars.nasa.gov/raw_images/${id}" target="_blank" rel="noopener">NASA page</a> · ${C[3]}`;
     if (cam === 'm') return { c: C[1], lon, lat, src: u, thumb: u, g: null, bw: false, cap: `${C[0]} · sol ${sol} · NASA doesn't publish where this camera was pointing, so it has no cone on the map · ${link}` };
-    const L = el < -1.5 ? Math.max(2, Math.min(80, C[2] / Math.tan(-el * D2R))) : 80, g = { az, el, hfov: hf, L };
+    // cone length: where the view centre meets the ground, at most 25 m (a view to the horizon would otherwise be a
+    // giant triangle over everything), and the wide hazard cameras shorter still
+    const cap = cam === 'f' || cam === 'r' ? 10 : 25, L = el < -1.5 ? Math.max(2, Math.min(cap, C[2] / Math.tan(-el * D2R))) : cap, g = { az, el, hfov: hf, L };
     return { c: C[1], lon, lat, src: u, thumb: u, bw: true, g: { ...g, hfov: Math.max(hf, 1.5) }, cap: `${C[0]} · sol ${sol} · ${lookTxt(g)} · ${link}` };
   });
   const used = [...new Set(rows.map(p => p[0]))];
@@ -3155,7 +3157,7 @@ function roverStops(ll) {
   if (bd < arr) { if (MSL.inside !== best) { MSL.inside = best; BG.lastStop = best; openStop(best); } }
   else if (bd > arr * 1.6) MSL.inside = -1;
   // the open stop's view cones only while you're near it: driving away, they'd cover the ground you drive over
-  const os = MSL.stops[MSL.open], near = !os || mDist(p, [os.lon, os.lat]) < Math.max(25, BG.V.len * BG.S * 2);
+  const near = true;   // (cones stay visible everywhere; they're capped in length instead)
   if (near !== MSL.conesOn) { MSL.conesOn = near; for (const l of ['ph-cone', 'ph-cone-line', 'ph-cone-hi']) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', near ? 'visible' : 'none'); }
   if (!near && MSL.hov >= 0) { MSL.hov = -1; phHighlight(-1); }
   const n = MSL.stops.length, nx = Math.min((BG.lastStop ?? 0) + 1, n - 1), s = MSL.stops[nx];
