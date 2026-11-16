@@ -500,6 +500,23 @@ function rampColour(t) {
   }
   return RAMP[RAMP.length - 1][1];
 }
+// Around Curiosity: grey HiRISE coloured with the colours of HiRISE's own colour strips there (the msl-color map):
+// for each brightness, the average colour of that brightness in the colour mosaic (measured from its tiles)
+const GALE_RAMP = [[0, 0, 0, 1], [16, 11, 18, 23], [32, 27, 34, 39], [48, 45, 50, 52], [64, 67, 64, 62], [80, 86, 79, 74], [96, 112, 92, 81],
+  [112, 133, 106, 91], [128, 163, 118, 93], [144, 182, 133, 106], [160, 201, 148, 119], [176, 214, 163, 132], [192, 228, 182, 150],
+  [208, 244, 199, 163], [224, 250, 218, 190], [240, 254, 238, 216], [255, 255, 255, 255]];
+const GALE_LUT = (() => { const t = new Uint8ClampedArray(256 * 3); for (let v = 0; v < 256; v++) { let k = 0; while (GALE_RAMP[k + 1][0] < v) k++;
+  const a = GALE_RAMP[k], b = GALE_RAMP[k + 1], f = (v - a[0]) / (b[0] - a[0]); for (let c = 0; c < 3; c++) t[v * 3 + c] = a[c + 1] + (b[c + 1] - a[c + 1]) * f; } return t; })();
+const GALE_HI_B = [136.95, -5.25, 137.85, -4.3];   // Gale crater around Curiosity's route
+function inGale(z, x, y) {
+  const n = 2 ** z, w = x / n * 360 - 180, e = (x + 1) / n * 360 - 180, N = tile2lat(y, n), S = tile2lat(y + 1, n), B = GALE_HI_B;
+  return e > B[0] && w < B[2] && N > B[1] && S < B[3];
+}
+function tintGale(out) {
+  const W = out.width, octx = out.getContext('2d'), img = octx.getImageData(0, 0, W, W), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { if (d[i + 3] === 0) continue; const v = Math.round(lum(d, i)) * 3; d[i] = GALE_LUT[v]; d[i + 1] = GALE_LUT[v + 1]; d[i + 2] = GALE_LUT[v + 2]; }
+  octx.putImageData(img, 0, 0);
+}
 function tintGrey(out, ref) {
   const W = out.width, octx = out.getContext('2d'), img = octx.getImageData(0, 0, W, W), d = img.data;
   const rd = ref ? ref.getContext('2d').getImageData(0, 0, W, W).data : null;
@@ -525,6 +542,7 @@ maplibregl.addProtocol('eq', async params => {
   const B = LAYERDEF(bm), z = +zs_, x = +xs, y = +ys;
   const out = await renderEq(bm, z, x, y);
   if (MARS && B.grey && /[?&]c=1/.test(params.url)) tintGrey(out, await renderEq('viking', z, x, y, true).catch(() => null));
+  else if (MARS && bm === 'hirise' && inGale(z, x, y)) tintGale(out);   // around Curiosity: always in colour
   const blob = await out.convertToBlob({ type: B.out, quality: 0.86 });
   return { data: await blob.arrayBuffer() };
 });
