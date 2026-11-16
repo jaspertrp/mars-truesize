@@ -808,6 +808,12 @@ for (const [k, B] of Object.entries(BASEMAPS)) {
     paint: { 'raster-fade-duration': 200, 'raster-resampling': 'linear' } });
 }
 
+// MapLibre 5 throws when it places a marker or popup on the 3D terrain above zoom 18 (the rover camera goes to 20.5);
+// a throw there also cancels whatever camera move was running. Skip that update instead (the marker stays put).
+for (const C of [maplibregl.Marker, maplibregl.Popup]) {
+  const up = C.prototype._update;
+  if (up) C.prototype._update = function (...a) { try { return up.apply(this, a); } catch (e) { if (!/Out of range source coordinates/.test(e && e.message)) throw e; } };
+}
 const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
