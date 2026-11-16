@@ -1899,7 +1899,8 @@ function phOpen(i) {
 // the view cones of the photos in PH.items, each from where its rover stood
 function drawCones(fit) {
   const fc = { type: 'FeatureCollection', features: PH.items.map((it, i) => it.g && !it.small ? ({ type: 'Feature',
-    properties: { i, c: it.c }, geometry: { type: 'Polygon', coordinates: [conePoly(it.lon, it.lat, it.g)] } }) : null).filter(Boolean) };
+    properties: { i, c: it.c, a: it.g.hfov * it.g.L * it.g.L }, geometry: { type: 'Polygon', coordinates: [conePoly(it.lon, it.lat, it.g)] } }) : null).filter(Boolean)
+    .sort((x, y) => y.properties.a - x.properties.a) };     // big cones underneath, small ones on top
   if (!map.getSource('ph-cones')) {
     map.addSource('ph-cones', { type: 'geojson', data: fc });
     map.addLayer({ id: 'ph-cone', type: 'fill', source: 'ph-cones', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.08 } });
@@ -2992,15 +2993,19 @@ function openStop(i) {
 function photoToward(lngLat) {
   const s = MSL.stops && MSL.stops[MSL.open]; if (!s) return -1;
   const p = [lngLat.lng, lngLat.lat];
-  let best = -1, bs = Infinity;
+  let best = -1, bs = Infinity, inBest = -1, inArea = Infinity;
   PH.items.forEach((it, k) => {
     if (!it.g || it.small) return;
     const d = mDist([it.lon, it.lat], p); if (d > 400) return;
+    // inside a cone: the smallest cone you clicked in always wins (so small cones under big ones can be picked)
+    if (d <= it.g.L && Math.abs(wrap180(bearingDeg([it.lon, it.lat], p) - it.g.az)) <= it.g.hfov / 2) {
+      const area = it.g.hfov * it.g.L * it.g.L; if (area < inArea) { inArea = area; inBest = k; }
+    }
     const da = Math.abs(wrap180(bearingDeg([it.lon, it.lat], p) - it.g.az)) / (it.g.hfov / 2 + 4);
     const score = da + (d > it.g.L ? (d - it.g.L) / 60 : 0) + (it.g.hfov < 3 ? 0.4 : 0);   // inside the cone and its reach first
     if (score < bs) { bs = score; best = k; }
   });
-  return bs < 3 ? best : -1;
+  return inBest >= 0 ? inBest : bs < 3 ? best : -1;
 }
 map.on('click', e => {
   if (!MSL.stops || MSL.open < 0) return;
