@@ -36,7 +36,11 @@
     radial-gradient(1px 1px at 8% 90%,#fff7,transparent 60%),radial-gradient(1.2px 1.2px at 47% 8%,#fff9,transparent 60%),
     radial-gradient(ellipse at 50% 50%,#1a0f12 0%,#07050a 70%)}
   #map{position:absolute;inset:0}
-  body.driving.mars #map{background:#e3c4a0}   /* the canvas is see-through in a thin strip at the horizon when tilted far: show haze, not the dark page */
+  body.driving.mars #map{background:#e3c4a0}
+  #driveHere{display:none;position:absolute;left:50%;bottom:40px;transform:translateX(-50%);z-index:6;padding:9px 16px;border-radius:999px;border:1px solid var(--accent);background:rgba(28,18,14,.9);color:var(--text);font:600 13.5px/1 'Space Grotesk',system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  #driveHere:hover{background:var(--accent);color:#1a0f0b}
+  #driveHere.on{display:block}
+  body.driving #driveHere,body.flying #driveHere{display:none}   /* the canvas is see-through in a thin strip at the horizon when tilted far: show haze, not the dark page */
   .maplibregl-map{font-family:inherit}
   .panel{position:absolute;z-index:10;top:14px;left:14px;width:320px;max-height:calc(100% - 28px);display:flex;flex-direction:column;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);backdrop-filter:blur(8px);overflow:hidden}
@@ -2591,6 +2595,8 @@ function loadKind(kind) {
   document.querySelectorAll('#hSize button').forEach(b => b.onclick = () => { setBuggySize(+b.dataset.s); b.blur(); });
   document.querySelectorAll('#hSpeedSel button').forEach(b => b.onclick = () => { setBuggySpeed(+b.dataset.m); b.blur(); });
   document.getElementById('hud').setAttribute('aria-label', kind === 'msl' ? 'Curiosity rover' : 'Moon buggy');
+  document.getElementById('hExit').innerHTML = kind === 'msl' ? '&#128506;&#65039; Map view' : 'Stop driving';
+  if (typeof driveHere !== 'undefined') driveHere.classList.remove('on');
   document.getElementById('hKeys').innerHTML = kind === 'msl'
     ? '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer (turns on the spot when stopped) &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> speed &middot; <kbd>N</kbd> / <kbd>B</kbd> next / previous stop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>Esc</kbd> stop'
     : '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop';
@@ -2867,8 +2873,9 @@ document.querySelectorAll('#pad button').forEach(b => {
 // buggy and jet cameras never go past this.
 const MAXSIMZOOM = 17.9;
 const HANDLERS = ['dragPan', 'dragRotate', 'scrollZoom', 'keyboard', 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'];
-async function startDrive(kind = 'buggy') {
+async function startDrive(kind = 'buggy', fromStart) {
   if (BG.on || FL.on || !HAS_TERRAIN || (kind === 'msl' && !MARS)) return;
+  const view0 = { c: map.getCenter(), z: map.getZoom(), b: map.getBearing() };   // where you were looking on the map
   if (!THREE) {
     driveBtn.disabled = true; driveBtn.textContent = 'Loading the buggy…';
     try { THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'); }
@@ -2909,18 +2916,21 @@ async function startDrive(kind = 'buggy') {
   BG.buggyModel.root.visible = kind !== 'msl'; BG.roverModel.root.visible = kind === 'msl';
   // start where you are looking if you are zoomed in, otherwise where the LRV first drove: Apollo 15 at Hadley Rille.
   // Curiosity always starts where it landed, Bradbury Landing, facing its first stop.
-  const R = kind === 'msl', st = R ? MSL.stops : null;
-  const here = !R && map.getZoom() >= 7, start = R ? new maplibregl.LngLat(st[0].lon, st[0].lat) : here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
-  const h0 = R ? bearingDeg([st[0].lon, st[0].lat], [st[1].lon, st[1].lat]) : here ? map.getBearing() : 0;
+  // Curiosity starts where you're looking when you're zoomed in near its route (so you can hop from the map into
+  // the rover and back at the same spot); otherwise where it landed, Bradbury Landing, facing its first stop.
+  const R = kind === 'msl', st = R ? MSL.stops : null, spot = R && !fromStart ? mslSpot(view0) : null;
+  const here = !R && map.getZoom() >= 7, start = R ? new maplibregl.LngLat(...(spot ? spot.ll : [st[0].lon, st[0].lat])) : here ? map.getCenter() : MOON ? new maplibregl.LngLat(3.634, 26.132) : new maplibregl.LngLat(77.451, 18.445);
+  const h0 = R ? (spot ? spot.h : bearingDeg([st[0].lon, st[0].lat], [st[1].lon, st[1].lat])) : here ? map.getBearing() : 0;
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start);
   Object.assign(BG, { on: true, mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, g: 0, vz: 0, v: 0, steer: 0, pitch: 0, roll: 0, air: false,
-    heading: h0, camBearing: h0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null, lastStop: R ? 0 : null });
+    heading: h0, camBearing: h0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null, lastStop: R ? (spot ? spot.last : 0) : null });
   BG.dust.forEach(d => { d.life = 0; d.m.visible = false; });
   drawTrail(); setBuggySize(BG.S); setBuggySpeed(BG.M);
   document.body.classList.add('driving'); document.body.classList.toggle('rover', R);
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
-  if (R) { MSL.inside = 0; openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
+  if (R && spot) { MSL.inside = -1; roverUrl(spot.last); showToast('Driving Curiosity from here. "Map view" takes you back to the map at the same spot.'); }
+  else if (R) { MSL.inside = 0; openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
   else if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
   BG.raf = requestAnimationFrame(driveStep);
 }
@@ -2929,6 +2939,7 @@ function stopDrive() {
   BG.on = false; cancelAnimationFrame(BG.raf); BG.keys = {};
   if (BG.kind === 'msl') roverUrl(null);
   document.body.classList.remove('driving', 'rover');
+  setTimeout(updateDriveHere, 1000);
   HANDLERS.forEach(hn => map[hn].enable());
   const back = BG.offMarkers || []; BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
@@ -2954,7 +2965,7 @@ function roverUrl(stop) {
 }
 if (MARS && new URLSearchParams(location.search).has('rover')) {
   const n = parseInt(new URLSearchParams(location.search).get('rover'), 10);
-  const go = async () => { await startDrive('msl'); if (BG.on && BG.kind === 'msl' && n > 1) goStop(Math.min(n, MSL.stops.length) - 1); };
+  const go = async () => { await startDrive('msl', true); if (BG.on && BG.kind === 'msl' && n > 1) goStop(Math.min(n, MSL.stops.length) - 1); };
   if (map.loaded()) go(); else map.once('load', () => setTimeout(go, 300));
 }
 document.getElementById('hExit').onclick = stopDrive;
@@ -3111,6 +3122,29 @@ function roverStops(ll) {
   document.getElementById('hNd').textContent = fmtM(d);
   document.getElementById('hArrow').style.transform = `rotate(${rot}deg)`;
 }
+// The map view you're in, as a place to start the rover: zoomed in (12+) within 3 km of Curiosity's route. Returns
+// the spot, the last stop before the nearest point of the route, and a heading towards the next stop.
+function mslSpot(v) {
+  if (!MSL.route || !v || v.z < 12) return null;
+  const c = [wrapLon(v.c.lng), v.c.lat];
+  let bi = -1, bd = Infinity;
+  MSL.route.forEach((r, i) => { const d = mDist(c, r); if (d < bd) { bd = d; bi = i; } });
+  if (bd > 3000) return null;
+  const sol = MSL.route[bi][2];
+  let last = 0; MSL.stops.forEach((s, i) => { if (s.sol <= sol) last = i; });
+  const nx = MSL.stops[Math.min(last + 1, MSL.stops.length - 1)];
+  const h = last < MSL.stops.length - 1 && mDist(c, [nx.lon, nx.lat]) > 5 ? bearingDeg(c, [nx.lon, nx.lat]) : v.b;
+  return { ll: c, last, h };
+}
+// a "Drive Curiosity here" button on the map whenever you're zoomed in near its route
+const driveHere = document.createElement('button'); driveHere.id = 'driveHere'; driveHere.type = 'button';
+driveHere.innerHTML = '&#128752; Drive Curiosity here'; document.body.appendChild(driveHere);
+driveHere.onclick = () => { driveHere.blur(); startDrive('msl'); };
+function updateDriveHere() {
+  const ok = MARS && !BG.on && !FL.on && MSL.route && mslSpot({ c: map.getCenter(), z: map.getZoom(), b: map.getBearing() });
+  driveHere.classList.toggle('on', !!ok);
+}
+if (MARS) { map.on('moveend', updateDriveHere); map.on('zoomend', () => { if (map.getZoom() >= 9.5) loadMsl().then(updateDriveHere); }); }
 // jump to a stop (N / B, or the buttons), facing the one after it
 function goStop(i) {
   const st = MSL.stops, s = st && st[i]; if (!s || !BG.on) return;
