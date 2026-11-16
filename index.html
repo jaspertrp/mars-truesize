@@ -488,7 +488,7 @@ const failures = {};
 // The CTX, THEMIS and HiRISE images are black and white. With "Mars colour" on, each of their tiles takes its
 // colour from the same spot in the Viking colour mosaic (232 m) and keeps its own detail as brightness
 // (a ratio "pan-sharpen"). Where Viking can't be reached, a plain Mars colour ramp is used instead.
-let marsColour = !!(saved && saved.tint === true);   // grey by default; type "red" / "grey" in the search box to switch
+let marsColour = !(saved && saved.tint === false);   // coloured from Viking by default; type "grey" / "red" in the search box to switch
 const lum = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
 const RAMP = [[0, [26, 15, 10]], [0.45, [146, 88, 55]], [0.75, [205, 150, 105]], [1, [240, 205, 170]]];
 function rampColour(t) {
@@ -745,6 +745,7 @@ function setDemMax(want) {
   map.addSource('dem', { type: 'raster-dem', tiles: ['dem://{z}/{x}/{y}'], tileSize: 512, encoding: 'terrarium', maxzoom: want });
   if (t) map.setTerrain(t);
 }
+const DEM_AREA = new Map();   // typical height per ~3° cell, from the DEM tiles made so far
 maplibregl.addProtocol('dem', async params => {
   const [zz, xx, yy] = params.url.replace('dem://', '').split('/').map(Number);
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
@@ -757,9 +758,15 @@ maplibregl.addProtocol('dem', async params => {
   const tiles = new Map(), jobs = [];
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
     const cc = ((c % cols) + cols) % cols;
-    jobs.push(getDem(zs, r, cc).then(t => tiles.set(r * 100000 + c, t)));
+    jobs.push(getDem(zs, r, cc).then(t => { if (t) tiles.set(r * 100000 + c, t); }).catch(() => {}));
   }
   await Promise.all(jobs);
+  // where a source tile didn't load, use the typical height of that area (from tiles that did) rather than 0:
+  // a patch at 0 m stands kilometres above Gale's floor and shows as broken lines floating in the sky
+  const cKey = (la, lo) => Math.round(la / 3) * 1000 + Math.round(lo / 3);
+  const latC = (latN + latS) / 2, lonC = wrapLon(lon0 + lonSpan / 2);
+  const fb = DEM_AREA.get(cKey(latC, lonC)) ?? DEM_AREA.get('all') ?? 0;
+  let hs = 0, hn = 0;
   const pole = Math.max(Math.abs(latN), Math.abs(latS)) > POLE_FADE0 ? await poleHeight() : null;
   const gale = await galeDem(zz, xx, yy), GB = GALE_DEM.b, mpd = R_BODY * 1000 * D2R;   // Mars metres per degree
   const W = 512, img = new ImageData(W, W), d = img.data;
@@ -777,8 +784,8 @@ maplibregl.addProtocol('dem', async params => {
         const x0 = vx | 0, y0 = vy | 0, ax = vx - x0, ay = vy - y0, px = t.px, w = t.w;
         const a = px[y0 * w + x0], b = px[y0 * w + x0 + 1], e = px[(y0 + 1) * w + x0], f = px[(y0 + 1) * w + x0 + 1];
         h = (a * (1 - ax) + b * ax) * (1 - ay) + (e * (1 - ax) + f * ax) * ay;
-        if (!(h > -20000 && h < 30000)) h = 0;
-      }
+        if (!(h > -20000 && h < 30000)) h = fb; else if ((i & 31) === 0 && (j & 31) === 0) { hs += h; hn++; }
+      } else h = fb;
       if (pw > 0) h = h * (1 - pw) + ph * pw;
       if (gale) {
         const gh = gale.px[Math.floor(j * gale.w / W) * gale.w + Math.floor(i * gale.w / W)];
@@ -793,6 +800,7 @@ maplibregl.addProtocol('dem', async params => {
       d[k] = v >> 8; d[k + 1] = Math.floor(v) & 255; d[k + 2] = Math.floor((v - Math.floor(v)) * 256); d[k + 3] = 255;
     }
   }
+  if (hn) { const m = hs / hn; DEM_AREA.set(cKey(latC, lonC), m); if (!DEM_AREA.has('all')) DEM_AREA.set('all', m); }
   return { data: await encodeHeightPNG(d, W, W) };
 });
 
