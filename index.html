@@ -2591,7 +2591,7 @@ const G_MOON = MOON ? 1.62 : 3.72;   // surface gravity of the world you drive o
 const MSLV = { len: 3.0, track: 2.2, base: 2.15, wheelR: 0.25, wheelW: 0.4, vmax: 0.04 };
 const VKIND = {
   buggy: { V: LRV, sizes: [[1, 'Real size'], [10, '10&times;'], [40, '40&times;']], speeds: [[1, 'Speed 1&times;'], [4, '4&times;'], [15, '15&times;'], [50, '50&times;']], S: 10, M: 4, kS: 'moon-buggy-size', kM: 'buggy-speed' },
-  msl: { V: MSLV, sizes: [[1, 'Real size'], [5, '5&times;'], [15, '15&times;'], [40, '40&times;']], speeds: [[1, 'Real speed'], [30, '30&times;'], [300, '300&times;'], [1500, '1500&times;']], S: 15, M: 300, kS: 'rover-size', kM: 'rover-speed' }
+  msl: { V: MSLV, sizes: [[1, 'Real size'], [5, '5&times;'], [15, '15&times;'], [40, '40&times;']], speeds: [[1, 'Real speed'], [30, '30&times;'], [300, '300&times;'], [600, '600&times;']], S: 15, M: 300, kS: 'rover-size', kM: 'rover-speed' }
 };
 const BG = { on: false, kind: 'buggy', V: LRV, S: 10, M: 4, keys: {}, camMode: 0, zoomAdj: 0, trail: [[]], dist: 0 };
 function loadKind(kind) {
