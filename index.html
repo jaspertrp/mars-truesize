@@ -458,7 +458,7 @@ function getSrc(bm, z, r, c) {
   p = once().catch(() => new Promise(ok => setTimeout(ok, 600)).then(once))
     .catch(() => { if (srcCache.get(key) === p) srcCache.delete(key); return null; });
   srcCache.set(key, p);
-  if (srcCache.size > 300) srcCache.delete(srcCache.keys().next().value);
+  if (srcCache.size > 150) srcCache.delete(srcCache.keys().next().value);   // ~1 MB each: keep memory in check
   return p;
 }
 const tile2lat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * R2D;
@@ -830,7 +830,7 @@ const map = new maplibregl.Map({
   container: 'map',
   attributionControl: false,
   center: [PLUTO ? 175 : -62, PLUTO ? 15 : 0], zoom: startProj === 'globe' ? 1.6 : 2,
-  minZoom: 0.5, maxZoom: EUROPA || PLUTO ? 9 : GIANT ? 10 : 18, renderWorldCopies: true, maxPitch: 80,
+  minZoom: 0.5, maxZoom: EUROPA || PLUTO ? 9 : GIANT ? 10 : 18, renderWorldCopies: true, maxPitch: 80, maxTileCacheZoomLevels: 3,
   style: {
     version: 8,
     projection: { type: startProj },
@@ -2851,7 +2851,7 @@ function driveStep(t) {
       BG.trail.push([row]);
       if (BG.trail.length > 60) BG.trail.shift();
       drawTrail();
-    } else if (t - (BG.trailT || 0) > 120) { BG.trailT = t; drawTrail(false); }
+    } else if (t - (BG.trailT || 0) > (R ? 700 : 120)) { BG.trailT = t; drawTrail(false); }   // (each update redraws the draped terrain: not too often)
   }
   // --- chase camera ---
   let db = wrap180(BG.heading - BG.camBearing); BG.camBearing += db * Math.min(1, dt * 2.5);
@@ -2860,7 +2860,7 @@ function driveStep(t) {
   const lenMap = BG.V.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
   let cz = Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)), cp = Math.max(0, Math.min(85, mode.pitch + (BG.pitchAdj || 0))), cb = BG.camBearing + (BG.yaw || 0);
   if (BG.intro) {                                   // the first moments: glide from where the map was to the chase camera
-    const k = Math.min(1, (performance.now() - BG.intro.t0) / 1600), e = k * k * (3 - 2 * k);
+    const k = Math.min(1, (performance.now() - BG.intro.t0) / 900), e = k * k * (3 - 2 * k);
     if (k >= 1 || BG.intro.zoom == null) BG.intro = null;
     else { cz = BG.intro.zoom + (cz - BG.intro.zoom) * e; cp = BG.intro.pitch + (cp - BG.intro.pitch) * e; cb = BG.intro.bearing + wrap180(cb - BG.intro.bearing) * e; }
   }
@@ -2973,6 +2973,8 @@ async function startDrive(kind = 'buggy', fromStart) {
   document.body.classList.add('driving'); document.body.classList.toggle('rover', R);
   map.setPadding({ top: Math.round(innerHeight * 0.12), bottom: 0, left: 0, right: 0 });
   document.activeElement && document.activeElement.blur();
+  BG.hidLines = R ? ['rt-casing', 'rt-heli'].filter(l => map.getLayer(l) && map.getLayoutProperty(l, 'visibility') !== 'none') : [];
+  BG.hidLines.forEach(l => map.setLayoutProperty(l, 'visibility', 'none'));   // lines draped on 3D terrain are costly to draw
   if (R && spot) { MSL.inside = -1; roverUrl(spot.last); showToast('Driving Curiosity from here. "Map view" takes you back to the map at the same spot.'); }
   else if (R) { MSL.inside = 0; openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
   else if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
@@ -2992,8 +2994,11 @@ function stopDrive() {
   if (buggyPrev.bg !== undefined && map.getLayer('bg')) { map.setPaintProperty('bg', 'background-color', buggyPrev.bg); buggyPrev.bg = undefined; }
   if (BG.prevPR && BG.prevPR !== map.getPixelRatio()) map.setPixelRatio(BG.prevPR);
   applyTerrain(false);
-  map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 16), bearing: map.getBearing(), duration: 1400, easing: t => 1 - Math.pow(1 - t, 3) });
-  map.once('moveend', () => { map.setMaxZoom(buggyPrev.maxZoom); map.setMaxPitch(buggyPrev.maxPitch || 80); back.forEach(m => { try { m.addTo(map); } catch (e) {} }); });   // markers back once zoomed out
+  (BG.hidLines || []).forEach(l => map.getLayer(l) && map.setLayoutProperty(l, 'visibility', 'visible')); BG.hidLines = [];
+  // straight to the map view: an animated zoom-out would load every zoom level in between (lots of memory at once)
+  map.jumpTo({ pitch: Math.min(map.getPitch(), 55), zoom: Math.min(map.getZoom(), 16), bearing: map.getBearing() });
+  map.setMaxZoom(buggyPrev.maxZoom); map.setMaxPitch(buggyPrev.maxPitch || 80);
+  setTimeout(() => back.forEach(m => { try { m.addTo(map); } catch (e) {} }), 300);   // markers back once zoomed out
   map.triggerRepaint();
 }
 driveBtn.onclick = () => startDrive();
