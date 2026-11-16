@@ -2830,7 +2830,7 @@ function driveStep(t) {
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
   const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (R ? vb * 1.5 : BG.V.vmax * S * 6)));   // pull back a bit at speed
   const lenMap = BG.V.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
-  map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)) });
+  try { map.jumpTo({ center: llw, bearing: BG.camBearing, pitch: mode.pitch, zoom: Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)) }); } catch (e) {}
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
 }
@@ -2889,7 +2889,9 @@ async function startDrive(kind = 'buggy') {
   HANDLERS.forEach(hn => map[hn].disable());
   // Labels far from the buggy make MapLibre look up heights in tiles it hasn't loaded, which throws at speed;
   // take them off the map while driving and put them back afterwards.
-  BG.offMarkers = [...featMarkers, ...siteMarkers, ...placed.map(p => p.label)].filter(m => m._map);
+  // (every marker: above zoom 18 MapLibre can't place them on the terrain and throws on each frame, which also
+  // stopped the rover being drawn and the stops being reached)
+  BG.offMarkers = [...new Set([...featMarkers, ...siteMarkers, ...placed.map(p => p.label), ...(map._markers || [])])].filter(m => m && m._map);
   BG.offMarkers.forEach(m => m.remove());
   if (!map.getSource('trail')) {
     for (const id of ['trail', 'trail-live']) {
@@ -2923,13 +2925,13 @@ function stopDrive() {
   if (BG.kind === 'msl') roverUrl(null);
   document.body.classList.remove('driving', 'rover');
   HANDLERS.forEach(hn => map[hn].enable());
-  (BG.offMarkers || []).forEach(m => m.addTo(map)); BG.offMarkers = null;
+  const back = BG.offMarkers || []; BG.offMarkers = null;
   map.setPadding(buggyPrev.padding);
   map.setSky(buggyPrev.sky || {});
   if (proj !== 'mercator') map.setProjection({ type: proj });
   applyTerrain(false);
   map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 16), duration: 800 });
-  map.once('moveend', () => map.setMaxZoom(buggyPrev.maxZoom));
+  map.once('moveend', () => { map.setMaxZoom(buggyPrev.maxZoom); back.forEach(m => { try { m.addTo(map); } catch (e) {} }); });   // markers back once zoomed out
   map.triggerRepaint();
 }
 driveBtn.onclick = () => startDrive();
