@@ -807,7 +807,12 @@ maplibregl.addProtocol('dem', async params => {
 const eqUrl = k => `eq://${k}/{z}/{x}/{y}` + (LAYERDEF(k).grey && MARS ? `?c=${marsColour ? 1 : 0}` : '');
 const baseSources = {
   'ov-hirise': { type: 'raster', tiles: [eqUrl('hirise')], tileSize: 512, minzoom: 11, maxzoom: 18 }
-}, baseLayers = [];
+};
+// Gale crater and Mount Sharp: the 5 m CTX mosaic, coloured from Viking, under HiRISE and the colour maps, so the
+// mountains around Curiosity are sharp instead of the 232 m Viking colour
+if (MARS) baseSources['ov-ctxgale'] = { type: 'raster', tiles: ['eq://ctx/{z}/{x}/{y}?c=1'], tileSize: 512, minzoom: 7, maxzoom: 13,
+  bounds: [136.3, -6.6, 138.7, -3.7] };
+const baseLayers = [];
 for (const [k, B] of Object.entries(BASEMAPS)) {
   baseSources['base-' + k] = B.local
     ? { type: 'raster', tiles: [new URL('tiles/', location.href).href + '{z}/{x}/{y}.jpg'], tileSize: 512, minzoom: 0, maxzoom: 4 }
@@ -843,6 +848,8 @@ const map = new maplibregl.Map({
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#e9e2dc' } },
       ...baseLayers,
+      ...(MARS ? [{ id: 'ov-ctxgale', type: 'raster', source: 'ov-ctxgale', minzoom: 7,
+        paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0, 8, 1], 'raster-fade-duration': 200 } }] : []),
       { id: 'ov-hirise', type: 'raster', source: 'ov-hirise', minzoom: 11,
         paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 1], 'raster-fade-duration': 200 } },
       { id: 'grid', type: 'line', source: 'grid', layout: { visibility: 'none' }, paint: { 'line-color': '#fff', 'line-opacity': 0.25, 'line-width': 0.7 } },
@@ -2264,12 +2271,13 @@ if (MARS) map.on('load', () => {
   });
 });
 function applyHirise() {
-  for (const id of ['ov-hirise', ...COLOR_LAYERS]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showHirise ? 'visible' : 'none');
+  for (const id of ['ov-hirise', 'ov-ctxgale', ...COLOR_LAYERS]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showHirise ? 'visible' : 'none');
   updateCredit();
 }
 tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
   let extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
+  if (MARS && showHirise && map.getZoom() >= 7) { const c = map.getCenter(); if (c.lng > 136.3 && c.lng < 138.7 && c.lat > -6.6 && c.lat < -3.7) extra += ' · Gale: ' + BASEMAPS.ctx.credit + ', coloured from Viking'; }
   if (MARS && showHirise && map.getZoom() >= 10) { const c = map.getCenter(); for (const cm of COLOR_MAPS) { const b = cm.bounds; if (c.lng > b[0] - 0.3 && c.lng < b[2] + 0.3 && c.lat > b[1] - 0.3 && c.lat < b[3] + 0.3) extra += ' · ' + cm.credit + ', via NASA MMGIS'; } }
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
   document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + under + extra;
