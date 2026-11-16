@@ -2169,6 +2169,7 @@ function buildRover(T, kind, tint) {
   }
   return g;
 }
+const ROVER_TAGS = [];
 const ROVER_LEN = { msl: 3, mer: 1.6, soj: 0.65, zhu: 2, heli: 1.2 };
 let roverLayer = null;
 const roverMarkers = [];
@@ -2217,7 +2218,7 @@ async function ensureRovers() {
 }
 if (MARS) {
   // name tags next to the models, once you're zoomed in far enough to see them
-  const tags = ROVERS.map(r => labelMarker(r.n + (r.k === 'heli' ? ' (last flight)' : ''), 'site', r.lat, r.lon, 'left').addTo(map));
+  const tags = ROVER_TAGS; ROVER_TAGS.push(...ROVERS.map(r => labelMarker(r.n + (r.k === 'heli' ? ' (last flight)' : ''), 'site', r.lat, r.lon, 'left').addTo(map)));
   const tagVis = () => { const on = map.getZoom() >= 9 && document.getElementById('tSites').checked; tags.forEach(t => t.getElement().style.display = on ? '' : 'none'); };
   map.on('zoom', tagVis); document.getElementById('tSites').addEventListener('change', tagVis); tagVis();
   map.on('zoomend', () => { if (map.getZoom() >= 8) ensureRovers(); });
@@ -2846,7 +2847,13 @@ function driveStep(t) {
   const mode = [{ px: 130, pitch: 72 }, { px: 55, pitch: 55 }, { px: 230, pitch: 78 }][BG.camMode];
   const pull = 2 ** (-0.6 * Math.log2(1 + Math.abs(BG.v) / (R ? vb * 1.5 : BG.V.vmax * S * 6)));   // pull back a bit at speed
   const lenMap = BG.V.len * k1, z = Math.log2(mode.px * pull * 2 ** BG.zoomAdj * 40075016.686 * cl / (512 * lenMap));
-  try { map.jumpTo({ center: llw, bearing: BG.camBearing + (BG.yaw || 0), pitch: Math.max(0, Math.min(85, mode.pitch + (BG.pitchAdj || 0))), zoom: Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)) }); } catch (e) {}
+  let cz = Math.min(R ? 20.5 : MAXSIMZOOM, Math.max(3, z)), cp = Math.max(0, Math.min(85, mode.pitch + (BG.pitchAdj || 0))), cb = BG.camBearing + (BG.yaw || 0);
+  if (BG.intro) {                                   // the first moments: glide from where the map was to the chase camera
+    const k = Math.min(1, (performance.now() - BG.intro.t0) / 1600), e = k * k * (3 - 2 * k);
+    if (k >= 1 || BG.intro.zoom == null) BG.intro = null;
+    else { cz = BG.intro.zoom + (cz - BG.intro.zoom) * e; cp = BG.intro.pitch + (cp - BG.intro.pitch) * e; cb = BG.intro.bearing + wrap180(cb - BG.intro.bearing) * e; }
+  }
+  try { map.jumpTo({ center: llw, bearing: cb, pitch: cp, zoom: cz }); } catch (e) {}
   map.triggerRepaint();
   if (t - (BG.hudT || 0) > 120) { BG.hudT = t; updateHud(ll); }
 }
@@ -2912,7 +2919,10 @@ async function startDrive(kind = 'buggy', fromStart) {
   if (measuring) setMeasuring(false);
   popup.remove();
   buggyPrev = { padding: map.getPadding(), maxZoom: map.getMaxZoom(), center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
-  if (proj !== 'mercator') map.setProjection({ type: 'mercator' });   // the custom 3D layer needs the flat projection; looks the same this close in
+  // (the projection is left alone: zoomed in this close the globe is drawn flat anyway, and switching it would make
+  // the map reload every tile, both now and when you go back to the map view)
+  BG.prevPR = map.getPixelRatio(); if (BG.prevPR > 1.25) map.setPixelRatio(1.25);   // fewer pixels to draw: smoother driving
+  BG.intro = { t0: performance.now(), zoom: view0.z, pitch: map.getPitch(), bearing: view0.b };   // glide from the map into the drive
   map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
   map.setMaxZoom(21); buggyPrev.maxPitch = map.getMaxPitch(); map.setMaxPitch(85);
   buggyPrev.sky = map.getSky();
@@ -2926,7 +2936,7 @@ async function startDrive(kind = 'buggy', fromStart) {
   // take them off the map while driving and put them back afterwards.
   // (every marker: above zoom 18 MapLibre can't place them on the terrain and throws on each frame, which also
   // stopped the rover being drawn and the stops being reached)
-  BG.offMarkers = [...new Set([...featMarkers, ...siteMarkers, ...placed.map(p => p.label), ...(map._markers || [])])].filter(m => m && m._map);
+  BG.offMarkers = [...new Set([...featMarkers, ...siteMarkers, ...placed.map(p => p.label), ...ROVER_TAGS, ...(map._markers || [])])].filter(m => m && m._map);
   BG.offMarkers.forEach(m => m.remove());
   if (!map.getSource('trail')) {
     for (const id of ['trail', 'trail-live']) {
@@ -2969,9 +2979,9 @@ function stopDrive() {
   map.setPadding(buggyPrev.padding);
   map.setSky(buggyPrev.sky || {});
   if (buggyPrev.bg !== undefined && map.getLayer('bg')) { map.setPaintProperty('bg', 'background-color', buggyPrev.bg); buggyPrev.bg = undefined; }
-  if (proj !== 'mercator') map.setProjection({ type: proj });
+  if (BG.prevPR && BG.prevPR !== map.getPixelRatio()) map.setPixelRatio(BG.prevPR);
   applyTerrain(false);
-  map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 16), duration: 800 });
+  map.easeTo({ pitch: Math.min(map.getPitch(), 60), zoom: Math.min(map.getZoom(), 16), bearing: map.getBearing(), duration: 1400, easing: t => 1 - Math.pow(1 - t, 3) });
   map.once('moveend', () => { map.setMaxZoom(buggyPrev.maxZoom); map.setMaxPitch(buggyPrev.maxPitch || 80); back.forEach(m => { try { m.addTo(map); } catch (e) {} }); });   // markers back once zoomed out
   map.triggerRepaint();
 }
@@ -3141,7 +3151,8 @@ function roverStops(ll) {
   if (near !== MSL.conesOn) { MSL.conesOn = near; for (const l of ['ph-cone', 'ph-cone-line', 'ph-cone-hi']) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', near ? 'visible' : 'none'); }
   if (!near && MSL.hov >= 0) { MSL.hov = -1; phHighlight(-1); }
   const n = MSL.stops.length, nx = Math.min((BG.lastStop ?? 0) + 1, n - 1), s = MSL.stops[nx];
-  if (map.getLayer('msl-stop-next')) map.setFilter('msl-stop-next', ['==', ['get', 'i'], BG.lastStop === n - 1 ? -1 : nx]);
+  const nf = BG.lastStop === n - 1 ? -1 : nx;
+  if (map.getLayer('msl-stop-next') && MSL.nextF !== nf) { MSL.nextF = nf; map.setFilter('msl-stop-next', ['==', ['get', 'i'], nf]); }
   const el = document.getElementById('hNext');
   if (BG.lastStop === n - 1) { el.innerHTML = 'You made it to where Curiosity is today!'; return; }
   const d = mDist(p, [s.lon, s.lat]), rot = bearingDeg(p, [s.lon, s.lat]) - map.getBearing();
