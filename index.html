@@ -653,6 +653,33 @@ function galeDem(z, x, y) {
   }
   return galeCache.get(key);
 }
+// The terrain tiles are written as PNG by hand: a canvas-made PNG can carry colour-profile information, and some
+// browsers then "correct" the colours when the map engine decodes them. In a height tile one colour step of the red
+// channel is 256 m, so that showed up as tall spikes. This minimal PNG (RGB, no colour chunks) has nothing to correct.
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf, start, end) { let c = 0xffffffff; for (let i = start; i < end; i++) c = CRC_T[(c ^ buf[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+async function encodeHeightPNG(rgba, w, h) {
+  const raw = new Uint8Array(h * (1 + w * 3));
+  for (let y = 0, o = 0; y < h; y++) {
+    raw[o++] = 1;                                         // filter "Sub": each byte minus the one 3 to its left
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 3; c++) raw[o++] = (rgba[i + c] - (x ? rgba[i - 4 + c] : 0)) & 255;
+    }
+  }
+  const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  const chunk = (type, data) => {
+    const b = new Uint8Array(12 + data.length), dv = new DataView(b.buffer);
+    dv.setUint32(0, data.length); for (let i = 0; i < 4; i++) b[4 + i] = type.charCodeAt(i);
+    b.set(data, 8); dv.setUint32(8 + data.length, crc32(b, 4, 8 + data.length)); return b;
+  };
+  const ihdr = new Uint8Array(13), hv = new DataView(ihdr.buffer);
+  hv.setUint32(0, w); hv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 2;   // 8-bit RGB, no interlace
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', z), chunk('IEND', new Uint8Array(0))];
+  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0)); let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out.buffer;
+}
 maplibregl.addProtocol('dem', async params => {
   const [zz, xx, yy] = params.url.replace('dem://', '').split('/').map(Number);
   const n = 2 ** zz, lon0 = xx / n * 360 - 180, lonSpan = 360 / n;
@@ -701,8 +728,7 @@ maplibregl.addProtocol('dem', async params => {
       d[k] = v >> 8; d[k + 1] = Math.floor(v) & 255; d[k + 2] = Math.floor((v - Math.floor(v)) * 256); d[k + 3] = 255;
     }
   }
-  const cv = new OffscreenCanvas(W, W); cv.getContext('2d').putImageData(img, 0, 0);
-  return { data: await (await cv.convertToBlob({ type: 'image/png' })).arrayBuffer() };
+  return { data: await encodeHeightPNG(d, W, W) };
 });
 
 const eqUrl = k => `eq://${k}/{z}/{x}/{y}` + (LAYERDEF(k).grey && MARS ? `?c=${marsColour ? 1 : 0}` : '');
