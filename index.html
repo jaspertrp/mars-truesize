@@ -607,7 +607,7 @@ function poleHeight() {          // mean height of the outer 2.5° around each p
   }).catch(() => null));
 }
 // Gale crater: the USGS 1 m MSL Gale Merged DEM (HiRISE/CTX/HRSC stereo, Parker & Calef) around Curiosity's route,
-// cut into our own tiles (gale-dem/, zoom 10-15, ~1.3 m per pixel; tools/build_gale_dem.py). Inside that area those
+// cut into our own tiles (gale-dem/, zoom 10-15, ~1.3 m per pixel, delta-coded gzipped int16; tools/build_gale_dem.py). Inside that area those
 // heights replace the 200 m global DEM, blended over the last 300 m to the edge so there is no step.
 // Heights are stored in image colours, so they must be decoded with no colour management: some browsers/screens
 // otherwise shift the colours a little, and one step in the high byte is 25.6 m (that showed up as tall spikes).
@@ -634,12 +634,19 @@ function galeDem(z, x, y) {
   if (!MARS || z < GALE_DEM.z0 || z > GALE_DEM.z1 || lonE < b[0] || lonW > b[2] || latN < b[1] || latS > b[3]) return Promise.resolve(null);
   const key = z + '/' + x + '/' + y;
   if (!galeCache.has(key)) {
-    galeCache.set(key, fetch(new URL(`gale-dem/${key}.webp`, location.href).href).then(r => r.ok ? r.blob() : null)
-      .then(bl => bl && createImageBitmap(bl, NO_COLOR_MGMT)).then(img => {
-        if (!img) return null;
-        const d = rawPixels(img), w = img.width, n = w * img.height, px = new Float32Array(n);
-        for (let i = 0; i < n; i++) { const v = d[i * 4] * 256 + d[i * 4 + 1]; px[i] = v ? v / 10 - 5000 : NaN; }
-        despike(px, w, img.height, 40);
+    galeCache.set(key, fetch(new URL(`gale-dem/${key}.dem`, location.href).href).then(r => r.ok ? r.arrayBuffer() : null)
+      .then(async buf => {
+        if (!buf) return null;
+        let u8 = new Uint8Array(buf);
+        if (u8[0] === 0x1f && u8[1] === 0x8b)        // gzipped (unless the server already unpacked it)
+          u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+        const d = new Int16Array(u8.buffer, u8.byteOffset, u8.byteLength >> 1), w = 512, px = new Float32Array(w * w);
+        let first = 0;
+        for (let y = 0; y < w; y++) {               // undo the delta coding
+          first += d[y * w]; let v = first;
+          px[y * w] = v ? v / 10 - 5000 : NaN;
+          for (let x = 1; x < w; x++) { v += d[y * w + x]; px[y * w + x] = v ? v / 10 - 5000 : NaN; }
+        }
         return { w, px };
       }).catch(() => null));
     if (galeCache.size > 120) galeCache.delete(galeCache.keys().next().value);
@@ -2082,7 +2089,8 @@ function applyTerrain(animate) {
   tTerrain.checked = terrainOn;
   exagWrap.classList.toggle('on', terrainOn);
   document.getElementById('exagVal').textContent = exag + '×';
-  if (!map.isStyleLoaded()) return;
+  // while the map is still busy loading, MapLibre refuses setTerrain: try again as soon as it's ready
+  if (!map.isStyleLoaded()) { if (!applyTerrain.wait) { applyTerrain.wait = true; const retry = () => { if (map.isStyleLoaded()) { map.off('render', retry); applyTerrain.wait = false; applyTerrain(animate); } }; map.on('render', retry); } return; }
   if (terrainOn) {
     map.setTerrain({ source: 'dem', exaggeration: BODY_SCALE * exag });
     if (animate && map.getPitch() < 20) map.easeTo({ pitch: 55, duration: 1000 });

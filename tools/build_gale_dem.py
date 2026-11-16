@@ -1,9 +1,10 @@
 # Gale crater 3D terrain tiles from the USGS "Mars MSL Gale Merged DEM 1m" (Parker & Calef; HiRISE/CTX/HRSC stereo
 # DEMs tied to MOLA). Input: a crop of that DEM at its native 1 m (equirectangular, Mars 2000 sphere R = 3396190 m) as
 # int16 decimetres + 5000 m (0 = no data), with its top-left pixel (col0, row0) in the full mosaic.
-# Output: Web Mercator tiles of 512 px, zoom 10-15 (~1.3 m per pixel at 15), as lossless WebP: height h (metres) is
-# stored as v = round((h + 5000) * 10) in red (high byte) and green (low byte); v = 0 means no data (the site then
-# uses its global 200 m DEM there).   Usage: build_gale_dem.py crop.int16 W H col0 row0 outdir [zmin zmax]
+# Output: Web Mercator tiles of 512 px, zoom 10-15 (~1.3 m per pixel at 15), as .dem files: height h (metres) is
+# stored as v = round((h + 5000) * 10), v = 0 meaning no data (the site then uses its global 200 m DEM there);
+# the 512 x 512 values are delta-coded (each from its left neighbour; a row's first from the row above) as little-endian
+# int16 and gzipped. (An image format was tried first, but browsers' colour management altered the values.)   Usage: build_gale_dem.py crop.int16 W H col0 row0 outdir [zmin zmax]
 # Tiles that already exist are skipped; tiles are built in parallel.
 import sys, os, math, numpy as np
 from multiprocessing import Pool
@@ -21,7 +22,7 @@ TS = 512
 ZMIN, ZMAX = (int(sys.argv[7]), int(sys.argv[8])) if len(sys.argv) > 8 else (10, 15)
 def build(job):
             z, x, y = job; n = 2 ** z
-            if os.path.exists(f'{out}/{z}/{x}/{y}.webp'): return 1
+            if os.path.exists(f'{out}/{z}/{x}/{y}.dem'): return 1
             lon = (x + (np.arange(TS) + 0.5) / TS) / n * 360 - 180
             yy = y + (np.arange(TS) + 0.5) / TS
             lat = np.degrees(np.arctan(np.sinh(np.pi * (1 - 2 * yy / n))))
@@ -51,9 +52,10 @@ def build(job):
             val = np.where(ok_y[:, None] & ok_x[None, :], val, 0)
             if not (val > 0).any(): return 0
             v = np.clip(np.round(val), 0, 65535).astype(np.uint16)
-            rgb = np.zeros((TS, TS, 3), np.uint8); rgb[..., 0] = v >> 8; rgb[..., 1] = v & 255
+            vi = v.astype(np.int32); dd = np.empty_like(vi)
+            dd[:, 1:] = vi[:, 1:] - vi[:, :-1]; dd[1:, 0] = vi[1:, 0] - vi[:-1, 0]; dd[0, 0] = vi[0, 0]
             d = f'{out}/{z}/{x}'; os.makedirs(d, exist_ok=True)
-            Image.fromarray(rgb).save(f'{d}/{y}.webp', lossless=True, quality=100, method=4)
+            open(f'{d}/{y}.dem', 'wb').write(__import__('gzip').compress(dd.astype('<i2').tobytes(), 9))
             return 1
 if __name__ == '__main__':
     for z in range(ZMIN, ZMAX + 1):
