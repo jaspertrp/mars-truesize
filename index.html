@@ -867,10 +867,12 @@ const SITES = EUROPA || GIANT || PLUTO ? [] : MOON ? [
   ['Curiosity · Gale', -4.589, 137.442], ['InSight', 4.502, 135.623], ['Perseverance · Jezero', 18.445, 77.451],
   ['Zhurong', 25.066, 109.925]
 ];
+const ALL_LABELS = [];   // every name tag made by labelMarker (landmarks, landers, rovers), for cullLabels
 function labelMarker(html, cls, lat, lon, anchor) {
   const el = document.createElement('div'), inner = document.createElement('span');
   inner.className = cls; inner.textContent = html; el.appendChild(inner);
-  return new maplibregl.Marker({ element: el, anchor: anchor || 'center', opacityWhenCovered: '0' }).setLngLat([lon, lat]);
+  const mk = new maplibregl.Marker({ element: el, anchor: anchor || 'center', opacityWhenCovered: '0' }).setLngLat([lon, lat]);
+  ALL_LABELS.push(mk); return mk;
 }
 const featMarkers = FEATURES.map(([n, la, lo]) => labelMarker(n, 'feat', la, lo).addTo(map));
 const siteMarkers = SITES.map(([n, la, lo]) => labelMarker(n, 'site', la, lo, 'left').addTo(map));
@@ -1681,10 +1683,10 @@ function cullLabels() {
     const ll = m.getLngLat(), far = d3.geoDistance(cc, [ll.lng, ll.lat]) > lim;
     m.getElement().style.visibility = far ? 'hidden' : '';
   };
-  featMarkers.forEach(m => set(m)); siteMarkers.forEach(m => set(m));
+  ALL_LABELS.forEach(m => set(m));
   placed.forEach(p => set(p.label));
 }
-map.on('move', cullLabels); map.on('load', cullLabels);
+map.on('render', cullLabels); map.on('load', cullLabels);
 
 // ---------- Perseverance's photos, with where they look (Mars) ----------
 // Click a Perseverance drive: the photos it took at the stop that drive ended at (until its next drive) load from
@@ -1948,14 +1950,30 @@ let showHirise = !(saved && saved.hirise === false);
 const tHirise = document.getElementById('tHirise');
 if (!MARS) { showHirise = false; tHirise.closest('label').style.display = 'none'; }   // HiRISE is a Mars camera
 tHirise.checked = showHirise;
-function applyHirise() { if (map.getLayer('ov-hirise')) map.setLayoutProperty('ov-hirise', 'visibility', showHirise ? 'visible' : 'none'); updateCredit(); }
+// Curiosity's colour map of Gale crater: the HiRISE colour (LRGB) mosaic from NASA's "Where is Curiosity?" map,
+// mirrored here as WebP tiles (msl-color/, zoom 10-17, about 0.65 m per pixel) because NASA's tile server doesn't
+// allow other websites to load it. It sits on top of the HiRISE detail layer and switches with it.
+const MSL_COLOR_BOUNDS = [137.32672354505786, -4.87560429259321, 137.4785574965306, -4.55506331169111];
+if (MARS) map.on('load', () => {
+  if (map.getSource('msl-color')) return;
+  map.addSource('msl-color', { type: 'raster', tiles: [new URL('msl-color/', location.href).href + '{z}/{x}/{y}.webp'], tileSize: 256,
+    minzoom: 10, maxzoom: 17, bounds: MSL_COLOR_BOUNDS });
+  map.addLayer({ id: 'ov-mslcolor', type: 'raster', source: 'msl-color', minzoom: 10,
+    layout: { visibility: showHirise ? 'visible' : 'none' },
+    paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0, 11, 1], 'raster-fade-duration': 200 } }, map.getLayer('grid') ? 'grid' : undefined);
+});
+function applyHirise() {
+  for (const id of ['ov-hirise', 'ov-mslcolor']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', showHirise ? 'visible' : 'none');
+  updateCredit();
+}
 tHirise.onchange = () => { showHirise = tHirise.checked; applyHirise(); save(); };
 function updateCredit() {
-  const extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
+  let extra = MARS && showHirise && map.getZoom() >= 11 ? ' · ' + OVERLAYS.hirise.credit : '';
+  if (MARS && showHirise && map.getZoom() >= 10) { const c = map.getCenter(); if (c.lng > 136.9 && c.lng < 137.9 && c.lat > -5.3 && c.lat < -4.1) extra += ' · Gale colour mosaic: NASA/JPL-Caltech/University of Arizona (HiRISE), via NASA MMGIS'; }
   const under = BASEMAPS[baseKey].under ? ' · gaps: ' + BASEMAPS[BASEMAPS[baseKey].under].credit : '';
   document.getElementById('baseCredit').textContent = BASEMAPS[baseKey].credit + under + extra;
 }
-map.on('zoomend', updateCredit);
+map.on('zoomend', updateCredit); map.on('moveend', updateCredit);
 const siteSel = document.getElementById('site');
 // worlds without landers (Europa) get a list of features to fly to instead
 const FLY = SITES.length ? SITES : FEATURES;

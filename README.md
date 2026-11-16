@@ -105,3 +105,10 @@ Russia. No 3D terrain: the New Horizons height map only covers one side.
 `rover-tracks.geojson`: every drive of Perseverance and Curiosity and every flight of the Ingenuity helicopter, from the
 GeoJSON behind NASA's "Where is the rover?" maps (MMGIS: `M20_traverse.json`, `MSL_traverse.json`,
 `m20_heli_flight_path.json` on mars.nasa.gov), with heights dropped and coordinates rounded to 6 decimals.
+
+## Gale crater in colour (Mars)
+
+`msl-color/`: the HiRISE colour (LRGB) mosaic of Gale crater around Curiosity's route, from NASA's "Where is Curiosity?"
+map (MMGIS layer `MSL_Gale_HiRISE-LRGB_78quads`, NASA/JPL-Caltech/University of Arizona). NASA's tile server does not
+allow other websites to load its tiles, so zoom levels 10–17 (about 0.65 m per pixel) are mirrored here as WebP,
+in the usual XYZ web-mercator layout. Shown with the "HiRISE detail" switch.
