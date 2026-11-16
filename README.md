@@ -119,3 +119,11 @@ in the usual XYZ web-mercator layout. Shown with the "HiRISE detail" switch.
 `M20_HiRISE_RGB_CTX_mosaic_25cm_v7_Merge_LERC_clip`, NASA/JPL-Caltech/University of Arizona/MSSS), mirrored as WebP:
 zoom 10–16 over the whole mosaic, plus zoom 17–18 (about 0.3 m per pixel) in a corridor of a few hundred metres around
 Perseverance's and Ingenuity's paths.
+
+## Gale crater in 3D (Mars)
+
+`gale-dem/`: 3D terrain around Curiosity's route from the USGS *Mars MSL Gale Merged DEM 1m* (Parker & Calef;
+HiRISE, CTX and HRSC stereo DEMs tied to MOLA). The 1 m DEM was read for the area of the colour mosaic (about
+9 × 19 km) and cut into 512-px Web Mercator tiles, zoom 10–15 (~1.3 m per pixel), by `tools/build_gale_dem.py`:
+lossless WebP, height = (red × 256 + green) / 10 − 5000 m, 0 = no data. Inside that area these heights replace the
+200 m global DEM, blended over the last 300 m.
