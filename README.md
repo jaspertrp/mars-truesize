@@ -143,3 +143,7 @@ drive, position) and the raw-image API (photos with camera vectors, attitude qua
 
 The grey parts of the Gale colour mosaic (where HiRISE took no colour strip) are coloured with the mosaic's own
 colours by `tools/colour_grey_tiles.py`; the grey HiRISE images around Gale crater are coloured the same way in the page.
+
+**Replay**: in the rover, "Replay the journey" (or P) lets Curiosity drive its real route by itself, sol by sol, with
+the date; it pauses at each stop with its story. The slider jumps to any sol. `?rover&replay` starts a replay from
+the landing site. On phones the drive panel is a compact bar with touch controls above it.

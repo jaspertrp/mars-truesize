@@ -166,6 +166,34 @@
   #stopCard .sc-go{margin-left:8px;background:#2a1d18;border:1px solid var(--line);color:var(--text);border-radius:7px;padding:3px 8px;font:inherit;font-size:11.5px;cursor:pointer}
   .hud #hStopRow{display:none;margin-top:8px;gap:10px;align-items:center;justify-content:center;border-top:1px solid var(--line);padding-top:8px}
   body.rover .hud #hStopRow{display:flex}
+  .hud #hReplayRow{display:none;margin-top:8px;gap:10px;align-items:center;justify-content:center}
+  body.rover .hud #hReplayRow{display:flex}
+  .hud #hScrub{width:220px;accent-color:#4fd1ff}
+  .hud #hSol{min-width:150px;font-variant-numeric:tabular-nums}
+  .hud #hSol b{color:#4fd1ff}
+  .hud #hPlay.on{background:#4fd1ff;color:#08202b;border-color:#4fd1ff}
+  #scMin{background:none;border:0;color:var(--muted);cursor:pointer;font-size:15px;display:none}
+  /* phones: the drive panel is a compact bar at the bottom, the touch pad sits just above it, the story is a
+     short sheet at the top that can be folded to its title */
+  @media (max-width: 700px) {
+    .hud{left:0!important;right:0!important;bottom:0!important;transform:none!important;width:auto!important;max-width:none!important;border-radius:12px 12px 0 0;padding:6px 8px;font-size:11.5px}
+    .hud .row{gap:6px}
+    .hud .big{font-size:17px;min-width:60px}
+    .hud #hPos,.hud .stat:nth-of-type(3),.hud #hSize,.hud .keys{display:none!important}
+    .hud .sz button{padding:5px 6px;font-size:11px}
+    .hud .exit{padding:5px 8px}
+    .hud #hNext{min-width:0;flex:1 1 100%;order:-1;font-size:11.5px}
+    .hud #hStopRow,.hud #hReplayRow{margin-top:5px;padding-top:5px;flex-wrap:wrap}
+    .hud #hScrub{width:100%;flex:1 1 100%;order:5}
+    .hud #hSol{min-width:0}
+    body.driving .pad{bottom:calc(var(--hudh, 230px) + 8px)}
+    .pad{grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,46px)}
+    body.driving .credit{display:none}
+    #stopCard{left:8px;right:8px;top:8px;width:auto;max-height:42vh;padding:10px 12px}
+    body:not(.driving) #stopCard{left:8px;right:8px}
+    #scMin{display:inline}
+    #stopCard.min{max-height:46px;overflow:hidden}
+  }
   .hud #hNext{min-width:300px;text-align:center} .hud #hNext b{color:#4fd1ff}
   .hud #hArrow{display:inline-block;color:#4fd1ff;font-size:18px;line-height:1;transition:transform .15s linear}
   .site{position:relative;display:block;font-size:10px;font-weight:500;color:#ffe0c9;white-space:nowrap;padding-left:10px;text-shadow:0 0 3px #000,0 0 6px #000;pointer-events:none}
@@ -287,6 +315,10 @@
     <button type="button" class="exit" id="hExit">Stop driving</button>
   </div>
   <div class="row" id="hStopRow"><button type="button" class="exit" id="hPrev" title="Back to the previous stop (B)">&#9198; Back</button><span id="hNext"></span><button type="button" class="exit" id="hNextB" title="Jump to the next stop (N)">Next stop &#9197;</button></div>
+  <div class="row" id="hReplayRow"><button type="button" class="exit" id="hPlay" title="Let Curiosity drive its real route by itself, sol by sol (P)">&#9654; Replay the journey</button>
+    <div class="sz" id="hRate" title="Replay speed, in Martian days (sols) per second"></div>
+    <input type="range" id="hScrub" min="0" max="5073" step="1" value="0" aria-label="Sol">
+    <span id="hSol"></span></div>
   <div class="keys" id="hKeys"><kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop</div>
 </div>
 <div class="jhud" id="jhud" role="region" aria-label="Fighter jet">
@@ -513,9 +545,12 @@ function inGale(z, x, y) {
   const n = 2 ** z, w = x / n * 360 - 180, e = (x + 1) / n * 360 - 180, N = tile2lat(y, n), S = tile2lat(y + 1, n), B = GALE_HI_B;
   return e > B[0] && w < B[2] && N > B[1] && S < B[3];
 }
+const GALE_LUT32 = (() => { const t = new Uint32Array(256); for (let v = 0; v < 256; v++) t[v] = GALE_LUT[v * 3] | GALE_LUT[v * 3 + 1] << 8 | GALE_LUT[v * 3 + 2] << 16; return t; })();   // little-endian RGBA
 function tintGale(out) {
   const W = out.width, octx = out.getContext('2d'), img = octx.getImageData(0, 0, W, W), d = img.data;
-  for (let i = 0; i < d.length; i += 4) { if (d[i + 3] === 0) continue; const v = Math.round(lum(d, i)) * 3; d[i] = GALE_LUT[v]; d[i + 1] = GALE_LUT[v + 1]; d[i + 2] = GALE_LUT[v + 2]; }
+  // one 32-bit read and write per pixel, integer brightness (this runs for every tile, so it has to be quick)
+  const p = new Uint32Array(d.buffer, d.byteOffset, d.length >> 2), L = GALE_LUT32;
+  for (let i = 0; i < p.length; i++) { const v = p[i]; if (!(v >>> 24)) continue; p[i] = L[((v & 255) * 77 + ((v >>> 8) & 255) * 150 + ((v >>> 16) & 255) * 29) >> 8] | (v & 0xff000000); }
   octx.putImageData(img, 0, 0);
 }
 function tintGrey(out, ref) {
@@ -2636,7 +2671,7 @@ function loadKind(kind) {
   document.getElementById('hExit').innerHTML = kind === 'msl' ? '&#128506;&#65039; Map view' : 'Stop driving';
   if (typeof driveHere !== 'undefined') driveHere.classList.remove('on');
   document.getElementById('hKeys').innerHTML = kind === 'msl'
-    ? '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer (turns on the spot when stopped) &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> speed &middot; <kbd>N</kbd> / <kbd>B</kbd> next / previous stop &middot; <kbd>C</kbd> camera &middot; drag or <kbd>Q</kbd> <kbd>E</kbd> to look around (<kbd>V</kbd> resets) &middot; scroll to zoom &middot; <kbd>Esc</kbd> map'
+    ? '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer (turns on the spot when stopped) &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> speed &middot; <kbd>N</kbd> / <kbd>B</kbd> next / previous stop &middot; <kbd>P</kbd> replay &middot; <kbd>C</kbd> camera &middot; drag or <kbd>Q</kbd> <kbd>E</kbd> to look around (<kbd>V</kbd> resets) &middot; scroll to zoom &middot; <kbd>Esc</kbd> map'
     : '<kbd>&uarr;</kbd><kbd>&darr;</kbd> / <kbd>W</kbd><kbd>S</kbd> drive &middot; <kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &middot; <kbd>Shift</kbd> boost &middot; <kbd>1</kbd>–<kbd>4</kbd> top speed &middot; <kbd>Space</kbd> hop &middot; <kbd>C</kbd> camera &middot; scroll to zoom &middot; <kbd>R</kbd> clear tracks &middot; <kbd>Esc</kbd> stop';
 }
 let THREE = null, buggyLayer = null, buggyPrev = null;
@@ -2766,6 +2801,7 @@ function drawTrail(all) {
 }
 const HEADINGS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 function updateHud(ll) {
+  const hh = hudEl.offsetHeight; if (hh && hh !== updateHud.h) { updateHud.h = hh; document.documentElement.style.setProperty('--hudh', hh + 'px'); }
   const kmh = Math.abs(BG.v) * 3.6;
   document.getElementById('hSpeed').innerHTML = BG.kind === 'msl' && kmh < 1 ? Math.round(Math.abs(BG.v) * 100) + ' <small>cm/s</small>'
     : (kmh < 10 ? kmh.toFixed(1) : Math.round(kmh)) + ' <small>km/h</small>';
@@ -2784,8 +2820,10 @@ function driveStep(t) {
   const vmax = vb * boost, acc = vb * 0.6 * (k.boost ? 2.2 : 1), brake = vb * 1.6;
   const thr = (k.up ? 1 : 0) - (k.down ? 1 : 0), steerIn = (k.right ? 1 : 0) - (k.left ? 1 : 0);
   const mc0 = new maplibregl.MercatorCoordinate(BG.mx, BG.my, 0), mu = mc0.meterInMercatorCoordinateUnits();
-  // --- driving (only with wheels on the ground) ---
-  if (!BG.air) {
+  // --- driving (only with wheels on the ground); or, in a replay, following Curiosity's real route ---
+  const RP = R && BG.replay && MSL.route;
+  if (RP) replayStep(dt);
+  else if (!BG.air) {
     if (thr > 0) BG.v += (BG.v < 0 ? brake : acc) * dt;
     else if (thr < 0) BG.v -= (BG.v > 0 ? brake : acc * 0.6) * dt;
     else BG.v -= Math.sign(BG.v) * Math.min(Math.abs(BG.v), vb * 0.35 * dt);
@@ -2799,7 +2837,7 @@ function driveStep(t) {
     if (k.hop && !BG.air && !R) { BG.vz = (BG.vz > 0 ? BG.vz : 0) + Math.sqrt(2 * G_MOON * BODY_SCALE * S * BG.V.len * BODY_SCALE * S * 0.8); BG.air = true; k.hop = false; spawnDust(14, 0.6, 0.8, false); }
   }
   k.hop = false;
-  const dMap = BG.v * dt * BODY_SCALE, h = BG.heading * D2R;
+  const dMap = RP ? 0 : BG.v * dt * BODY_SCALE, h = BG.heading * D2R;
   BG.mx += Math.sin(h) * dMap * mu; BG.my -= Math.cos(h) * dMap * mu;
   BG.my = Math.min(0.97, Math.max(0.03, BG.my));
   BG.dist += Math.abs(BG.v * dt);
@@ -2892,8 +2930,9 @@ const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', Arr
 function driveKey(e) {
   if (!BG.on || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
   const down = e.type === 'keydown', a = KEYMAP[e.code];
-  if (a) { BG.keys[a] = down; e.preventDefault(); return; }
+  if (a) { BG.keys[a] = down; e.preventDefault(); if (down && BG.replay && a !== 'boost') replayStop(); return; }
   if (!down) return;
+  if (e.code === 'KeyP' && BG.kind === 'msl') { replayToggle(); return; }
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) BG.keys.hop = true; }
   else if (/^Digit[1-4]$/.test(e.code)) setBuggySpeed(VKIND[BG.kind].speeds[+e.code.slice(5) - 1][0]);
   else if (BG.kind === 'msl' && (e.code === 'KeyN' || e.code === 'KeyB')) goStop(Math.max(0, Math.min(MSL.stops.length - 1, (BG.lastStop ?? 0) + (e.code === 'KeyN' ? 1 : -1))));
@@ -2986,7 +3025,7 @@ async function startDrive(kind = 'buggy', fromStart) {
   const h0 = R ? (spot ? spot.h : bearingDeg([st[0].lon, st[0].lat], [st[1].lon, st[1].lat])) : here ? map.getBearing() : 0;
   const mc = maplibregl.MercatorCoordinate.fromLngLat(start);
   Object.assign(BG, { on: true, mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, g: 0, vz: 0, v: 0, steer: 0, pitch: 0, roll: 0, air: false,
-    heading: h0, camBearing: h0, yaw: 0, pitchAdj: 0, keys: {}, t: 0, dist: 0, trail: [[]], tll: null, lastStop: R ? (spot ? spot.last : 0) : null });
+    heading: h0, camBearing: h0, yaw: 0, pitchAdj: 0, replay: null, keys: {}, t: 0, dist: 0, trail: [[]], tll: null, lastStop: R ? (spot ? spot.last : 0) : null });
   BG.dust.forEach(d => { d.life = 0; d.m.visible = false; });
   drawTrail(); setBuggySize(BG.S); setBuggySpeed(BG.M);
   document.body.classList.add('driving'); document.body.classList.toggle('rover', R);
@@ -2994,6 +3033,7 @@ async function startDrive(kind = 'buggy', fromStart) {
   document.activeElement && document.activeElement.blur();
   BG.hidLines = R ? ['rt-casing', 'rt-heli'].filter(l => map.getLayer(l) && map.getLayoutProperty(l, 'visibility') !== 'none') : [];
   BG.hidLines.forEach(l => map.setLayoutProperty(l, 'visibility', 'none'));   // lines draped on 3D terrain are costly to draw
+  if (R) { replayUi(); replayHud(replayTimes() && MSL.stopT[spot ? spot.last : 0]); }
   if (R && spot) { MSL.inside = -1; roverUrl(spot.last); showToast('Driving Curiosity from here. "Map view" takes you back to the map at the same spot.'); }
   else if (R) { MSL.inside = 0; openStop(0); showToast('Curiosity at Bradbury Landing, August 2012. Follow its route to the numbered stops (N jumps to the next one).'); }
   else if (!here) showToast(MOON ? 'Dropped you at Apollo 15, Hadley Rille, where the first moon buggy drove in 1971' : 'Dropped you in Jezero Crater, where Perseverance is driving');
@@ -3034,7 +3074,8 @@ function roverUrl(stop) {
 }
 if (MARS && new URLSearchParams(location.search).has('rover')) {
   const n = parseInt(new URLSearchParams(location.search).get('rover'), 10);
-  const go = async () => { await startDrive('msl', true); if (BG.on && BG.kind === 'msl' && n > 1) goStop(Math.min(n, MSL.stops.length) - 1); };
+  const go = async () => { await startDrive('msl', true); if (BG.on && BG.kind === 'msl' && n > 1) goStop(Math.min(n, MSL.stops.length) - 1);
+    if (BG.on && new URLSearchParams(location.search).has('replay')) setTimeout(replayStart, 1500); };   // ?rover&replay: start the replay
   if (map.loaded()) go(); else map.once('load', () => setTimeout(go, 300));
 }
 document.getElementById('hExit').onclick = stopDrive;
@@ -3086,9 +3127,10 @@ const stopCard = document.getElementById('stopCard');
 function renderStory() {
   stopCard.innerHTML = `<div class="sc-top"><b>Curiosity's journey · ${MSL.stops.length} stops</b>
       <label title="Show Mastcam's colour photos and tint the black-and-white cameras"><input type="checkbox" id="scColour"${MSL.colour ? ' checked' : ''}> Colour</label>
-      <button type="button" title="Close" aria-label="Close">&#10005;</button></div>` +
+      <button type="button" id="scMin" title="Fold the story" aria-label="Fold the story">&#9662;</button><button type="button" title="Close" aria-label="Close">&#10005;</button></div>` +
     MSL.stops.map((s, i) => `<section data-i="${i}"><h3><span class="sc-n">${i + 1}</span>${s.t}<small>${s.date}</small></h3><div class="sc-body"></div></section>`).join('');
-  stopCard.querySelector('.sc-top button').onclick = closeStop;
+  stopCard.querySelector('.sc-top button[title="Close"]').onclick = closeStop;
+  stopCard.querySelector('#scMin').onclick = () => stopCard.classList.toggle('min');
   stopCard.querySelector('#scColour').onchange = e => { MSL.colour = e.target.checked; try { localStorage.setItem('msl-colour', MSL.colour ? '1' : '0'); } catch (x) {} if (MSL.open >= 0) openStop(MSL.open, true); };
   stopCard.querySelectorAll('section h3').forEach(h => h.onclick = () => {
     const k = +h.parentNode.dataset.i, s = MSL.stops[k];
@@ -3241,6 +3283,88 @@ function updateDriveHere() {
   driveHere.classList.toggle('on', !!ok);
 }
 if (MARS) { map.on('moveend', updateDriveHere); map.on('zoomend', () => { if (map.getZoom() >= 9.5) loadMsl().then(updateDriveHere); }); }
+// ---------- replay: Curiosity drives its real route by itself, sol by sol ----------
+// Time runs in sols (Martian days since landing). Each NASA waypoint is placed at its sol (several on one sol are
+// spread over that sol), and the rover moves in a straight line between them; it pauses at every stop with the
+// story open until you press play again. Arrow keys take over the driving; the slider jumps to any sol.
+const RATES = [[2, '2'], [10, '10'], [40, '40'], [150, '150']];
+let replayRate = 10; try { const v = +localStorage.getItem('replay-rate'); if (RATES.some(r => r[0] === v)) replayRate = v; } catch (e) {}
+const solDate = sol => new Date(Date.UTC(2012, 7, 6, 5, 17) + sol * 88775244).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function replayTimes() {
+  if (MSL.rt) return MSL.rt;
+  const r = MSL.route, t = new Float64Array(r.length);
+  for (let i = 0; i < r.length;) { let j = i; while (j < r.length && r[j][2] === r[i][2]) j++; for (let k = i; k < j; k++) t[k] = r[k][2] + (k - i + 1) / (j - i + 1); i = j; }
+  MSL.rt = t;
+  MSL.stopT = MSL.stops.map(s => { let k = 0; for (let i = 0; i < r.length; i++) if (r[i][2] <= s.sol) k = i; return t[k]; });
+  return t;
+}
+function replayPos(s) {                                   // -> { ll, seg bearing } at time s
+  const t = replayTimes(), r = MSL.route;
+  if (s <= t[0]) return { ll: [r[0][0], r[0][1]], i: 0 };
+  let lo = 0, hi = t.length - 1;
+  if (s >= t[hi]) return { ll: [r[hi][0], r[hi][1]], i: hi - 1 };
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (t[m] <= s) lo = m; else hi = m; }
+  const f = (s - t[lo]) / (t[hi] - t[lo]), a = r[lo], b = r[hi];
+  return { ll: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], i: lo };
+}
+function replayUi() {
+  const rp = BG.replay, play = document.getElementById('hPlay');
+  const on = !!(rp && !rp.paused);
+  play.classList.toggle('on', on);
+  play.innerHTML = on ? '&#10074;&#10074; Pause' : rp ? '&#9654; Continue' : '&#9654; Replay the journey';
+}
+function replayHud(s) {
+  document.getElementById('hSol').innerHTML = `<b>Sol ${Math.floor(s)}</b> · ${solDate(s)}`;
+  const sc = document.getElementById('hScrub'); if (document.activeElement !== sc) sc.value = Math.floor(s);
+}
+function replayStart() {
+  if (!BG.on || BG.kind !== 'msl' || !MSL.route) return;
+  const t = replayTimes(), p = BG.pll || [MSL.stops[0].lon, MSL.stops[0].lat];
+  let bi = 0, bd = Infinity; MSL.route.forEach((r, i) => { const d = mDist(p, r); if (d < bd) { bd = d; bi = i; } });
+  BG.replay = { s: bd < 60 ? t[bi] : MSL.stopT[BG.lastStop || 0], paused: false };
+  BG.keys = {}; BG.v = 0;
+  replayUi();
+}
+function replayStop() { BG.replay = null; BG.v = 0; replayUi(); }
+function replayToggle() {
+  if (!BG.replay) replayStart();
+  else { BG.replay.paused = !BG.replay.paused; if (!BG.replay.paused && BG.replay.s >= replayTimes()[replayTimes().length - 1]) BG.replay.s = 0; replayUi(); }
+}
+function replayStep(dt) {
+  const rp = BG.replay, t = replayTimes();
+  let s1 = rp.s;
+  if (!rp.paused) {
+    s1 = Math.min(t[t.length - 1], rp.s + replayRate * dt);
+    // the next stop on the way: stop there, open its story and wait
+    const k = MSL.stopT.findIndex((st, i) => st > rp.s + 1e-6 && st <= s1);
+    if (k >= 0) { s1 = MSL.stopT[k]; rp.paused = true; BG.lastStop = k; MSL.inside = k; openStop(k); replayUi(); }
+    if (s1 >= t[t.length - 1]) { rp.paused = true; replayUi(); }
+  }
+  const prev = replayPos(rp.s), cur = replayPos(s1);
+  rp.s = s1;
+  const mc = maplibregl.MercatorCoordinate.fromLngLat(cur.ll);
+  BG.mx = mc.x; BG.my = mc.y;
+  const moved = mDist(prev.ll, cur.ll);
+  BG.v = dt > 0 ? moved / dt : 0;
+  const a = MSL.route[cur.i], b = MSL.route[Math.min(cur.i + 1, MSL.route.length - 1)];
+  if (mDist(a, b) > 0.5) { const hb = bearingDeg(a, b); BG.heading += wrap180(hb - BG.heading) * Math.min(1, dt * 4); }
+  BG.steer = 0;
+  if ((rp.hudT = (rp.hudT || 0) + dt) > 0.1) { rp.hudT = 0; replayHud(s1); }
+}
+document.getElementById('hRate').innerHTML = RATES.map(([v, l]) => `<button type="button" data-r="${v}" title="${v} sols per second">${l}</button>`).join('') + '<span style="padding:5px 6px;color:var(--muted);font-size:11px">sols/s</span>';
+const rateUi = () => document.querySelectorAll('#hRate button').forEach(b => b.classList.toggle('on', +b.dataset.r === replayRate));
+document.querySelectorAll('#hRate button').forEach(b => b.onclick = () => { replayRate = +b.dataset.r; rateUi(); b.blur(); try { localStorage.setItem('replay-rate', replayRate); } catch (e) {} });
+rateUi();
+document.getElementById('hPlay').onclick = e => { e.currentTarget.blur(); replayToggle(); };
+document.getElementById('hScrub').oninput = e => {
+  if (!BG.on || !MSL.route) return;
+  if (!BG.replay) { replayStart(); BG.replay.paused = true; }
+  const t = replayTimes(), sol = +e.target.value;
+  let k = t.findIndex(x => x >= sol); if (k < 0) k = t.length - 1;
+  BG.replay.s = t[k]; BG.z = null; BG.pll = null; BG.trail.push([]); BG.tll = null;
+  let last = 0; MSL.stopT.forEach((st, i) => { if (st <= BG.replay.s) last = i; }); BG.lastStop = last; MSL.inside = -1;
+  replayStep(0); replayHud(BG.replay.s); replayUi();
+};
 // jump to a stop (N / B, or the buttons), facing the one after it
 function goStop(i) {
   const st = MSL.stops, s = st && st[i]; if (!s || !BG.on) return;
@@ -3249,6 +3373,7 @@ function goStop(i) {
   Object.assign(BG, { mx: mc.x, my: mc.y, pmx: mc.x, pmy: mc.y, z: null, pz: null, pll: null, v: 0, heading: h, camBearing: h, lastStop: i, tll: null });
   MSL.inside = i;
   BG.trail.push([]);
+  if (BG.replay) { BG.replay.s = replayTimes() && MSL.stopT[i]; BG.replay.paused = true; replayUi(); }
   openStop(i);
 }
 document.getElementById('hNextB').onclick = e => { e.currentTarget.blur(); if (MSL.stops) goStop(Math.min(MSL.stops.length - 1, (BG.lastStop ?? 0) + 1)); };
