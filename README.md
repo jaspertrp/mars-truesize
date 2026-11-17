@@ -140,3 +140,6 @@ direction, tilt and width are the real ones.
 
 `msl-stops.json` is built by `tools/build_msl_stops.py` from NASA's MMGIS waypoints for Curiosity (sol, site,
 drive, position) and the raw-image API (photos with camera vectors, attitude quaternions and CAHV camera models).
+
+The grey parts of the Gale colour mosaic (where HiRISE took no colour strip) are coloured with the mosaic's own
+colours by `tools/colour_grey_tiles.py`; the grey HiRISE images around Gale crater are coloured the same way in the page.
